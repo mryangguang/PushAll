@@ -1,0 +1,12 @@
+{
+  "id": "source.sql",
+  "type": "source",
+  "name": "SQL 数据库",
+  "description": "执行查询并返回结果集，支持 Oracle / MySQL / PostgreSQL / SQLite。",
+  "version": "1.0.0",
+  "author": "PushAll",
+  "entry": "plugin.py:SqlSource",
+  "config_schema": "schema.json",
+  "permissions": ["database"],
+  "icon": "database"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "source.static",
+  "type": "source",
+  "name": "静态数据",
+  "description": "内置 JSON 数据，用于调试模板与渠道。",
+  "version": "1.0.0",
+  "author": "PushAll",
+  "entry": "plugin.py:StaticSource",
+  "config_schema": "schema.json",
+  "permissions": [],
+  "icon": "file"
+}

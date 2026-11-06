@@ -1,0 +1,12 @@
+{
+  "id": "source.http",
+  "type": "source",
+  "name": "HTTP 接口",
+  "description": "调用 REST 接口并解析 JSON，支持自定义请求头与取值路径。",
+  "version": "1.0.0",
+  "author": "PushAll",
+  "entry": "plugin.py:HttpSource",
+  "config_schema": "schema.json",
+  "permissions": ["network"],
+  "icon": "globe"
+}

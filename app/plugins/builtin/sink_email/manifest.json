@@ -1,0 +1,12 @@
+{
+  "id": "sink.email",
+  "type": "sink",
+  "name": "SMTP 邮件",
+  "description": "把消息以纯文本 + HTML 两种格式发送到指定邮箱。",
+  "version": "1.0.0",
+  "author": "PushAll",
+  "entry": "plugin.py:EmailSink",
+  "config_schema": "schema.json",
+  "permissions": ["network"],
+  "icon": "mail"
+}

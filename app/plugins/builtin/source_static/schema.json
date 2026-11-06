@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "rows": {
+      "type": "string",
+      "title": "JSON 数组",
+      "description": "数组中的每个对象是一行数据",
+      "x-ui": {"widget": "code", "rows": 10, "placeholder": "[{\"店铺\": \"BJ001\", \"库存\": 3}]"}
+    }
+  },
+  "required": ["rows"]
+}

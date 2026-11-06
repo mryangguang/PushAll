@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "host": {"type": "string", "title": "SMTP 服务器", "x-ui": {"widget": "text", "placeholder": "smtp.exmail.qq.com"}},
+    "port": {"type": "integer", "title": "端口", "default": 465, "x-ui": {"widget": "number"}},
+    "security": {"type": "string", "title": "加密方式", "enum": ["ssl", "starttls", "none"], "default": "ssl", "x-ui": {"widget": "select"}},
+    "username": {"type": "string", "title": "登录账号", "x-ui": {"widget": "text", "placeholder": "notice@example.com"}},
+    "password": {"type": "string", "title": "密码 / 授权码", "x-ui": {"widget": "password", "secret": true}},
+    "from_addr": {"type": "string", "title": "发件人地址", "description": "留空则使用登录账号", "x-ui": {"widget": "text"}},
+    "to_addrs": {"type": "string", "title": "收件人", "description": "多个用英文逗号分隔", "x-ui": {"widget": "text", "placeholder": "a@example.com,b@example.com"}},
+    "subject_prefix": {"type": "string", "title": "主题前缀", "description": "例如 [OA告警] ", "x-ui": {"widget": "text"}}
+  },
+  "required": ["host", "to_addrs"]
+}

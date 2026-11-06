@@ -1,0 +1,46 @@
+# ---------- Python ----------
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---------- 构建产物 ----------
+build/
+dist/
+*.spec
+*.egg-info/
+.eggs/
+
+# ---------- 运行时数据（本地生成，不提交） ----------
+data/
+logs/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+!.env.example
+
+# ---------- 用户插件（保留目录） ----------
+plugins/*
+!plugins/.gitkeep
+
+# ---------- 本机与编辑器 ----------
+*.lnk
+Thumbs.db
+desktop.ini
+.DS_Store
+.idea/
+.vscode/
+*.zip
+*.7z
+*.rar

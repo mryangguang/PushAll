@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "url": {"type": "string", "title": "接口地址", "x-ui": {"widget": "text", "placeholder": "https://example.com/api/list"}},
+    "method": {"type": "string", "title": "请求方法", "enum": ["GET", "POST", "PUT"], "default": "GET", "x-ui": {"widget": "select"}},
+    "headers": {"type": "string", "title": "请求头（JSON）", "x-ui": {"widget": "code", "rows": 3, "placeholder": "{\"Authorization\": \"Bearer xxx\"}"}},
+    "params": {"type": "string", "title": "URL 参数（JSON）", "x-ui": {"widget": "code", "rows": 3}},
+    "body_type": {"type": "string", "title": "请求体类型", "enum": ["json", "form", "text"], "default": "json", "x-ui": {"widget": "select"}},
+    "body": {"type": "string", "title": "请求体", "x-ui": {"widget": "code", "rows": 5}},
+    "data_path": {
+      "type": "string",
+      "title": "数据取值路径",
+      "description": "从返回 JSON 中定位数组，如 data.items；留空表示返回体本身",
+      "x-ui": {"widget": "text", "placeholder": "data.items"}
+    },
+    "timeout": {"type": "integer", "title": "超时（秒）", "default": 20, "x-ui": {"widget": "number"}},
+    "max_rows": {"type": "integer", "title": "最大行数", "default": 200, "x-ui": {"widget": "number"}}
+  },
+  "required": ["url"]
+}

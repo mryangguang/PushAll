@@ -1,0 +1,4 @@
+# 数据库驱动（按需安装：用到哪种装哪种）
+oracledb>=2.5
+pymysql>=1.1
+psycopg[binary]>=3.2

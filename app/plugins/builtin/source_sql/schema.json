@@ -1,0 +1,53 @@
+{
+  "type": "object",
+  "properties": {
+    "driver": {
+      "type": "string",
+      "title": "数据库类型",
+      "enum": ["oracle", "mysql", "postgres", "sqlite"],
+      "default": "oracle",
+      "x-ui": {"widget": "select"}
+    },
+    "mode": {
+      "type": "string",
+      "title": "Oracle 连接模式",
+      "enum": ["thin", "thick"],
+      "default": "thin",
+      "description": "thin 为纯 Python 驱动；连接 Oracle 11g 或需要 Instant Client 时选 thick",
+      "x-ui": {"widget": "select"}
+    },
+    "lib_dir": {
+      "type": "string",
+      "title": "Instant Client 目录",
+      "description": "thick 模式可选；留空则使用系统已安装的 Oracle Client",
+      "x-ui": {"widget": "text", "placeholder": "C:\\oracle\\instantclient_21_12"}
+    },
+    "dsn": {
+      "type": "string",
+      "title": "连接串 / 文件路径",
+      "description": "Oracle 可填 host:port/service；SQLite 填 .db 文件路径。填了此项可忽略下面的主机分项。",
+      "x-ui": {"widget": "text", "placeholder": "10.0.0.10:1521/ORCL"}
+    },
+    "host": {"type": "string", "title": "主机", "x-ui": {"widget": "text", "placeholder": "127.0.0.1"}},
+    "port": {"type": "integer", "title": "端口", "x-ui": {"widget": "number", "placeholder": "1521"}},
+    "user": {"type": "string", "title": "用户名", "x-ui": {"widget": "text"}},
+    "password": {"type": "string", "title": "密码", "x-ui": {"widget": "password", "secret": true}},
+    "database": {
+      "type": "string",
+      "title": "数据库 / 服务名",
+      "description": "Oracle 填 service_name；MySQL / PostgreSQL 填库名",
+      "x-ui": {"widget": "text"}
+    },
+    "query": {"type": "string", "title": "SQL 查询", "x-ui": {"widget": "code", "rows": 10, "language": "sql"}},
+    "params": {
+      "type": "string",
+      "title": "绑定参数（JSON）",
+      "description": "如 {\"dept\": \"1001\"}，SQL 中用 :dept 引用（MySQL/PG 用 %(dept)s）",
+      "x-ui": {"widget": "code", "rows": 3}
+    },
+    "max_rows": {"type": "integer", "title": "最大行数", "default": 200, "x-ui": {"widget": "number"}},
+    "lower_keys": {"type": "boolean", "title": "字段名转小写", "default": true}
+  },
+  "required": ["driver", "query"]
+}
+

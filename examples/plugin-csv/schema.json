@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "path": {"type": "string", "title": "CSV 文件路径", "x-ui": {"widget": "text", "placeholder": "D:\\data\\shop.csv"}},
+    "encoding": {"type": "string", "title": "编码", "enum": ["utf-8-sig", "utf-8", "gbk"], "default": "utf-8-sig", "x-ui": {"widget": "select"}},
+    "delimiter": {"type": "string", "title": "分隔符", "default": ",", "x-ui": {"widget": "text"}},
+    "max_rows": {"type": "integer", "title": "最大行数", "default": 200, "x-ui": {"widget": "number"}}
+  },
+  "required": ["path"]
+}

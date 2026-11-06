@@ -1,0 +1,12 @@
+{
+  "id": "source.csv",
+  "type": "source",
+  "name": "CSV 文件",
+  "description": "读取本地 CSV 文件，每行一条记录。",
+  "version": "1.0.0",
+  "author": "示例",
+  "entry": "plugin.py:CsvSource",
+  "config_schema": "schema.json",
+  "permissions": ["filesystem"],
+  "icon": "file"
+}

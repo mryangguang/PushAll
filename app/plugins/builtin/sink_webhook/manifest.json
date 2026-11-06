@@ -1,0 +1,12 @@
+{
+  "id": "sink.webhook",
+  "type": "sink",
+  "name": "通用 Webhook",
+  "description": "把消息 POST 到任意 HTTP 接口，请求体支持模板。",
+  "version": "1.0.0",
+  "author": "PushAll",
+  "entry": "plugin.py:WebhookSink",
+  "config_schema": "schema.json",
+  "permissions": ["network"],
+  "icon": "webhook"
+}

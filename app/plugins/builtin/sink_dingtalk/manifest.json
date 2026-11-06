@@ -1,0 +1,12 @@
+{
+  "id": "sink.dingtalk",
+  "type": "sink",
+  "name": "钉钉群机器人",
+  "description": "通过群自定义机器人 Webhook 推送 Markdown 消息，支持加签与 @ 成员。",
+  "version": "1.0.0",
+  "author": "PushAll",
+  "entry": "plugin.py:DingTalkSink",
+  "config_schema": "schema.json",
+  "permissions": ["network"],
+  "icon": "dingtalk"
+}

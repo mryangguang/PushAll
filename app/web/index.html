@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PushAll 消息中心</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<div id="app" v-cloak>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">PA</div>
+      <div>
+        <div class="brand-name">PushAll</div>
+        <div class="brand-sub">消息中心</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button v-for="n in navs" :key="n.key" :class="{ active: view === n.key }" @click="go(n.key)">
+        <span class="ico">{{ n.icon }}</span>
+        <span class="label">{{ n.label }}</span>
+        <span class="badge" v-if="n.key === 'runs' && failedCount">{{ failedCount }}</span>
+      </button>
+    </nav>
+
+    <div class="side-foot">
+      <span class="dot" :class="meta.version ? 'ok' : 'idle'"></span>
+      <span v-if="meta.version">v{{ meta.version }} · {{ meta.timezone }}</span>
+      <span v-else>连接中…</span>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="top-title">
+        <h1>{{ pageTitle }}</h1>
+        <p class="sub">{{ pageSubtitle }}</p>
+      </div>
+      <div class="top-actions">
+        <button class="btn ghost" @click="refreshAll" :disabled="loading">刷新</button>
+        <button v-if="view === 'scenarios'" class="btn primary" @click="newScenario">+ 新建场景</button>
+        <button v-if="view === 'sources'" class="btn primary" @click="openConfigModal('source')">+ 新建数据源</button>
+        <button v-if="view === 'channels'" class="btn primary" @click="openConfigModal('channel')">+ 新建渠道</button>
+        <button v-if="view === 'templates'" class="btn primary" @click="openTemplate(null)">+ 新建模板</button>
+        <button v-if="view === 'plugins'" class="btn primary" @click="pickPluginZip">+ 安装插件</button>
+        <input ref="zipInput" type="file" accept=".zip" class="hidden" @change="installPlugin">
+      </div>
+    </header>
+
+    <!-- ================= 场景 ================= -->
+    <section v-if="view === 'scenarios'" class="view scenario-view">
+      <div class="list-pane">
+        <input class="search" v-model="scenarioFilter" placeholder="搜索场景…">
+        <div class="scenario-list">
+          <button
+            v-for="s in filteredScenarios"
+            :key="s.id"
+            class="scenario-item"
+            :class="{ active: current && current.id === s.id }"
+            @click="selectScenario(s.id)">
+            <span class="dot" :class="statusClass(s.last_status)"></span>
+            <span class="si-main">
+              <span class="si-name">{{ s.name }}</span>
+              <span class="si-meta">{{ scheduleText(s) }} · {{ s.last_run_at || '尚未运行' }}</span>
+            </span>
+            <span class="tag" :class="statusClass(s.last_status)">{{ statusText(s.last_status) }}</span>
+          </button>
+          <div class="empty-hint" v-if="!filteredScenarios.length">
+            还没有场景。点击右上角「新建场景」开始。
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-pane" v-if="current">
+        <div class="detail-head">
+          <div class="detail-title">
+            <input class="title-input" v-model="current.name" placeholder="场景名称">
+            <span class="tag" :class="current.enabled ? 'success' : 'muted'">{{ current.enabled ? '已启用' : '已停用' }}</span>
+          </div>
+          <div class="detail-actions">
+            <button class="btn ghost" @click="previewScenario" :disabled="!current.id">预览</button>
+            <button class="btn ghost" @click="runScenario" :disabled="!current.id || running">{{ running ? '运行中…' : '立即运行' }}</button>
+            <button class="btn primary" @click="saveScenario">保存</button>
+            <div class="more-wrap">
+              <button class="btn ghost icon" @click="moreOpen = !moreOpen">⋯</button>
+              <div class="menu" v-if="moreOpen">
+                <button @click="duplicateScenario" :disabled="!current.id">复制场景</button>
+                <button class="danger" @click="removeScenario" :disabled="!current.id">删除场景</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="steps">
+          <button v-for="(t, i) in stepTabs" :key="t.key" :class="{ active: step === t.key }" @click="step = t.key">
+            <span class="num">{{ i + 1 }}</span>{{ t.label }}
+          </button>
+        </div>
+
+        <div class="step-body">
+          <!-- 基本 -->
+          <div v-if="step === 'basic'" class="panel">
+            <div class="field">
+              <label>场景名称</label>
+              <input v-model="current.name" placeholder="例如：每日库存预警">
+            </div>
+            <div class="field">
+              <label>说明</label>
+              <textarea v-model="current.description" rows="2" placeholder="这个场景做什么、推给谁"></textarea>
+            </div>
+            <label class="switch-line">
+              <span class="switch"><input type="checkbox" v-model="current.enabled"><i></i></span>
+              <span>启用该场景{{ current.schedule_mode === 'cron' ? '（定时任务会生效）' : '' }}</span>
+            </label>
+          </div>
+
+          <!-- 数据源 -->
+          <div v-if="step === 'source'" class="panel">
+            <div class="field">
+              <label>选择数据源</label>
+              <select v-model="current.source_id">
+                <option :value="null">未选择</option>
+                <option v-for="s in sources" :key="s.id" :value="s.id">{{ s.name }}（{{ pluginName(s.plugin_id) }}）</option>
+              </select>
+              <div class="help">数据源在「数据源」页维护，可被多个场景复用。</div>
+            </div>
+            <div class="inline-actions">
+              <button class="btn ghost" @click="testCurrentSource" :disabled="!current.source_id || sourceTesting">
+                {{ sourceTesting ? '取数中…' : '测试取数' }}
+              </button>
+              <span class="muted" v-if="sourceTest">{{ sourceTest.message }}</span>
+            </div>
+            <div class="table-wrap small" v-if="sourceTest && sourceTest.rows && sourceTest.rows.length">
+              <table>
+                <thead><tr><th v-for="c in sourceTest.columns" :key="c">{{ c }}</th></tr></thead>
+                <tbody>
+                  <tr v-for="(r, i) in sourceTest.rows" :key="i">
+                    <td v-for="c in sourceTest.columns" :key="c">{{ r[c] }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="help" v-if="current.source_id">仅展示前 {{ sourceTest.rows.length }} 行</div>
+            </div>
+          </div>
+
+          <!-- 模板 -->
+          <div v-if="step === 'template'" class="panel">
+            <div class="field">
+              <label>选择模板</label>
+              <select v-model="current.template_id">
+                <option :value="null">使用默认模板</option>
+                <option v-for="t in templates" :key="t.id" :value="t.id">{{ t.name }}</option>
+              </select>
+              <div class="help">模板决定标题和正文。正文使用 Markdown，可插入表格。</div>
+            </div>
+            <div class="inline-actions">
+              <button class="btn ghost" @click="openTemplate(current.template_id)">编辑模板</button>
+              <button class="btn ghost" @click="previewScenario" :disabled="!current.id">渲染预览</button>
+            </div>
+            <div class="code-hint" v-pre>
+              常用写法：{{ count }} 条数 · {{ rows | md_table }} 表格 · {{ now() }} 当前时间 · {{ scenario.name }} 场景名
+            </div>
+          </div>
+
+          <!-- 推送 -->
+          <div v-if="step === 'push'" class="panel">
+            <div class="field">
+              <label>推送渠道</label>
+              <div class="check-list" v-if="channels.length">
+                <label v-for="c in channels" :key="c.id" class="check-item">
+                  <input type="checkbox" :value="c.id" v-model="current.channel_ids">
+                  <span class="ci-name">{{ c.name }}</span>
+                  <span class="ci-meta">{{ pluginName(c.plugin_id) }}</span>
+                </label>
+              </div>
+              <div class="empty-hint" v-else>还没有渠道，请先到「渠道」页添加钉钉群机器人或邮箱。</div>
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label>失败重试次数</label>
+                <input type="number" min="0" max="3" v-model.number="current.options.retry">
+                <div class="help">仅对网络类失败重试，业务错误（如 token 失效）不重试。</div>
+              </div>
+              <label class="switch-line compact">
+                <span class="switch"><input type="checkbox" v-model="current.options.send_when_empty"><i></i></span>
+                <span>没有数据时也发送</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 调度 -->
+          <div v-if="step === 'schedule'" class="panel">
+            <div class="field">
+              <label>触发方式</label>
+              <div class="radio-row">
+                <label v-for="m in scheduleModes" :key="m.value" class="radio-item" :class="{ active: current.schedule_mode === m.value }">
+                  <input type="radio" :value="m.value" v-model="current.schedule_mode">
+                  <span class="ri-title">{{ m.label }}</span>
+                  <span class="ri-desc">{{ m.desc }}</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="field" v-if="current.schedule_mode === 'cron'">
+              <label>cron 表达式</label>
+              <div class="cron-row">
+                <input v-model="current.cron" placeholder="0 9 * * *" class="mono">
+                <button class="btn ghost" @click="checkCron">计算下次</button>
+              </div>
+              <div class="preset-row">
+                <button v-for="p in cronPresets" :key="p.expr" class="chip" @click="current.cron = p.expr">{{ p.label }}</button>
+              </div>
+              <div class="help">5 段格式：分 时 日 月 周，时区 {{ meta.timezone }}</div>
+              <div class="next-runs" v-if="nextRuns.length">
+                <span v-for="t in nextRuns" :key="t" class="chip ghost">{{ t }}</span>
+              </div>
+            </div>
+
+            <div class="field" v-if="current.schedule_mode === 'webhook'">
+              <label>外部调用地址</label>
+              <div class="copy-row" v-if="current.id">
+                <code>{{ hookUrl }}</code>
+                <button class="btn ghost" @click="copyText(hookUrl)">复制</button>
+              </div>
+              <div class="help" v-else>保存场景后生成地址。POST 的 JSON 会作为 payload 提供给模板。</div>
+            </div>
+
+            <div class="field" v-if="current.id">
+              <label>最近运行</label>
+              <div class="muted">{{ current.last_run_at || '尚未运行' }} · {{ statusText(current.last_status) }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-pane empty-state" v-else>
+        <div class="empty-illust">📨</div>
+        <p>选择左侧场景，或新建一个</p>
+      </div>
+    </section>
+
+    <!-- ================= 数据源 / 渠道 ================= -->
+    <section v-if="view === 'sources' || view === 'channels'" class="view">
+      <div class="table-wrap">
+        <table class="list-table">
+          <thead>
+            <tr>
+              <th style="width: 30%">名称</th>
+              <th>插件</th>
+              <th>更新时间</th>
+              <th style="width: 200px">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in (view === 'sources' ? sources : channels)" :key="item.id">
+              <td class="strong">{{ item.name }}</td>
+              <td><span class="tag muted">{{ pluginName(item.plugin_id) }}</span></td>
+              <td class="muted">{{ item.updated_at }}</td>
+              <td>
+                <button class="link" @click="openConfigModal(view === 'sources' ? 'source' : 'channel', item)">编辑</button>
+                <button class="link" @click="quickTest(view === 'sources' ? 'source' : 'channel', item)">测试</button>
+                <button class="link danger" @click="removeConfig(view === 'sources' ? 'source' : 'channel', item)">删除</button>
+              </td>
+            </tr>
+            <tr v-if="!(view === 'sources' ? sources : channels).length">
+              <td colspan="4">
+                <div class="empty-hint">暂无记录，点击右上角新建。</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================= 模板 ================= -->
+    <section v-if="view === 'templates'" class="view">
+      <div class="table-wrap">
+        <table class="list-table">
+          <thead>
+            <tr>
+              <th style="width: 24%">名称</th>
+              <th>标题模板</th>
+              <th>更新时间</th>
+              <th style="width: 160px">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="t in templates" :key="t.id">
+              <td class="strong">{{ t.name }}</td>
+              <td class="mono muted">{{ t.title_tpl }}</td>
+              <td class="muted">{{ t.updated_at }}</td>
+              <td>
+                <button class="link" @click="openTemplate(t.id)">编辑</button>
+                <button class="link danger" @click="removeTemplate(t)">删除</button>
+              </td>
+            </tr>
+            <tr v-if="!templates.length">
+              <td colspan="4"><div class="empty-hint">暂无模板。新建一个，或让场景使用默认模板。</div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================= 插件 ================= -->
+    <section v-if="view === 'plugins'" class="view">
+      <div class="plugin-grid">
+        <div class="plugin-card" v-for="p in plugins" :key="p.id">
+          <div class="pc-head">
+            <div class="pc-icon">{{ pluginIcon(p.icon) }}</div>
+            <div class="pc-title">
+              <div class="pc-name">{{ p.name }}</div>
+              <div class="pc-meta">
+                <span class="tag" :class="p.type === 'source' ? 'blue' : 'green'">{{ p.type === 'source' ? '数据源' : '推送' }}</span>
+                <span class="muted">v{{ p.version }}</span>
+                <span class="tag muted" v-if="p.builtin">内置</span>
+              </div>
+            </div>
+            <label class="switch small">
+              <input type="checkbox" :checked="p.enabled" @change="togglePlugin(p, $event.target.checked)">
+              <i></i>
+            </label>
+          </div>
+          <p class="pc-desc">{{ p.description || '—' }}</p>
+          <div class="pc-foot">
+            <span class="perms">
+              <span v-for="perm in p.permissions" :key="perm" class="tag muted">{{ perm }}</span>
+              <span v-if="!p.permissions || !p.permissions.length" class="tag muted">无外部权限</span>
+            </span>
+            <button class="link danger" v-if="!p.builtin" @click="uninstallPlugin(p)">卸载</button>
+          </div>
+          <div class="pc-error" v-if="p.error">{{ p.error }}</div>
+        </div>
+      </div>
+      <div class="panel plugin-tip">
+        <h3>如何新增插件？</h3>
+        <p>在 <code>{{ meta.plugin_dir }}</code> 下新建目录，放入 <code>manifest.json</code>、<code>schema.json</code>、<code>plugin.py</code>，
+        然后在插件页刷新即可。表单由 schema 自动生成，无需改主程序。也可以直接把插件目录打成 zip 安装。</p>
+      </div>
+    </section>
+
+    <!-- ================= 运行记录 ================= -->
+    <section v-if="view === 'runs'" class="view">
+      <div class="filter-row">
+        <select v-model="runFilter">
+          <option :value="null">全部场景</option>
+          <option v-for="s in scenarios" :key="s.id" :value="s.id">{{ s.name }}</option>
+        </select>
+        <button class="btn ghost" @click="loadRuns">刷新</button>
+      </div>
+      <div class="table-wrap">
+        <table class="list-table">
+          <thead>
+            <tr>
+              <th style="width: 160px">时间</th>
+              <th>场景</th>
+              <th style="width: 90px">触发</th>
+              <th style="width: 90px">状态</th>
+              <th style="width: 70px">行数</th>
+              <th style="width: 80px">耗时</th>
+              <th>信息</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in runs" :key="r.id" class="clickable" @click="openRun(r.id)">
+              <td class="mono muted">{{ r.created_at }}</td>
+              <td class="strong">{{ r.scenario_name }}</td>
+              <td><span class="tag muted">{{ triggerText(r.trigger) }}</span></td>
+              <td><span class="tag" :class="statusClass(r.status)">{{ statusText(r.status) }}</span></td>
+              <td>{{ r.row_count }}</td>
+              <td class="mono">{{ r.duration_ms }}ms</td>
+              <td class="muted ellipsis">{{ r.message }}</td>
+            </tr>
+            <tr v-if="!runs.length">
+              <td colspan="7"><div class="empty-hint">暂无运行记录。</div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================= 设置 ================= -->
+    <section v-if="view === 'settings'" class="view">
+      <div class="panel">
+        <h3>运行信息</h3>
+        <div class="kv">
+          <div><span>版本</span><b>v{{ meta.version }}</b></div>
+          <div><span>时区</span><b>{{ meta.timezone }}</b></div>
+          <div><span>数据目录</span><code>{{ meta.data_dir }}</code></div>
+          <div><span>插件目录</span><code>{{ meta.plugin_dir }}</code></div>
+          <div><span>密钥加密</span><b>{{ meta.secret_enabled ? '已启用' : '未启用' }}</b></div>
+        </div>
+        <p class="help">所有配置保存在本地 SQLite（data/pushall.db），不依赖外部服务。</p>
+      </div>
+
+      <div class="panel">
+        <h3>备份与恢复</h3>
+        <div class="inline-actions">
+          <button class="btn ghost" @click="exportData">导出配置 JSON</button>
+          <button class="btn ghost" @click="pickImport">导入配置 JSON</button>
+          <input ref="importInput" type="file" accept=".json" class="hidden" @change="importData">
+        </div>
+        <p class="help">导出内容包含 webhook 与密码等敏感字段，请妥善保管。导入会追加记录，不会覆盖现有数据。</p>
+      </div>
+
+      <div class="panel">
+        <h3>界面</h3>
+        <p class="help">当前为本地单机模式，仅监听 127.0.0.1。可通过 .env 设置 PUSHALL_TOKEN 增加访问令牌。</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ================= 弹窗 ================= -->
+  <div class="modal-mask" v-if="modal" @click.self="closeModal">
+    <div class="modal" :class="'modal-' + modal.type">
+
+      <!-- 数据源 / 渠道表单 -->
+      <template v-if="modal.type === 'source' || modal.type === 'channel'">
+        <header class="modal-head">
+          <h2>{{ modal.item.id ? '编辑' : '新建' }}{{ modal.type === 'source' ? '数据源' : '渠道' }}</h2>
+          <button class="btn ghost icon" @click="closeModal">✕</button>
+        </header>
+        <div class="modal-body">
+          <div class="field">
+            <label>名称</label>
+            <input v-model="modal.item.name" placeholder="例如：生产库 OA / 华北库存群">
+          </div>
+          <div class="field">
+            <label>插件</label>
+            <select v-model="modal.item.plugin_id" @change="onModalPluginChange">
+              <option value="">请选择插件</option>
+              <option v-for="p in pluginsByType(modal.type === 'source' ? 'source' : 'sink')" :key="p.id" :value="p.id">
+                {{ p.name }}{{ p.enabled ? '' : '（已禁用）' }}
+              </option>
+            </select>
+          </div>
+          <schema-form v-if="modalPlugin" :schema="modalPlugin.schema" v-model="modal.item.config"></schema-form>
+          <div class="test-box" v-if="modal.test">
+            <div class="test-line" :class="modal.test.ok ? 'ok' : 'bad'">
+              <b>{{ modal.test.ok ? '测试成功' : '测试失败' }}</b>
+              <span>{{ modal.test.message }}</span>
+            </div>
+            <div class="table-wrap small" v-if="modal.test.rows && modal.test.rows.length">
+              <table>
+                <thead><tr><th v-for="c in modal.test.columns" :key="c">{{ c }}</th></tr></thead>
+                <tbody>
+                  <tr v-for="(r, i) in modal.test.rows" :key="i">
+                    <td v-for="c in modal.test.columns" :key="c">{{ r[c] }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <footer class="modal-foot">
+          <button class="btn ghost" @click="testModal" :disabled="modal.testing || !modal.item.plugin_id">
+            {{ modal.testing ? '测试中…' : (modal.type === 'source' ? '测试取数' : '测试发送') }}
+          </button>
+          <span class="spacer"></span>
+          <button class="btn ghost" @click="closeModal">取消</button>
+          <button class="btn primary" @click="saveModal">保存</button>
+        </footer>
+      </template>
+
+      <!-- 模板编辑 -->
+      <template v-if="modal.type === 'template'">
+        <header class="modal-head">
+          <h2>{{ modal.item.id ? '编辑模板' : '新建模板' }}</h2>
+          <button class="btn ghost icon" @click="closeModal">✕</button>
+        </header>
+        <div class="modal-body template-body">
+          <div class="field">
+            <label>模板名称</label>
+            <input v-model="modal.item.name" placeholder="例如：库存预警模板">
+          </div>
+          <div class="field">
+            <label>标题模板</label>
+            <input v-model="modal.item.title_tpl" class="mono" placeholder="{{ count }} 家店铺库存低于安全线">
+          </div>
+          <div class="field">
+            <label>正文模板（Markdown / Jinja2）</label>
+            <textarea v-model="modal.item.body_tpl" rows="14" class="code"></textarea>
+          </div>
+          <div class="field">
+            <label>预览用示例数据（JSON 数组）</label>
+            <textarea v-model="modal.sample" rows="5" class="code"></textarea>
+          </div>
+          <div class="preview-box" v-if="modal.preview">
+            <div class="preview-title">{{ modal.preview.title }}</div>
+            <pre class="preview-content">{{ modal.preview.content }}</pre>
+          </div>
+        </div>
+        <footer class="modal-foot">
+          <button class="btn ghost" @click="previewTemplate">预览渲染</button>
+          <span class="spacer"></span>
+          <button class="btn ghost" @click="closeModal">取消</button>
+          <button class="btn primary" @click="saveTemplate">保存</button>
+        </footer>
+      </template>
+
+      <!-- 场景预览 -->
+      <template v-if="modal.type === 'preview'">
+        <header class="modal-head">
+          <h2>渲染预览</h2>
+          <button class="btn ghost icon" @click="closeModal">✕</button>
+        </header>
+        <div class="modal-body" v-if="previewResult">
+          <div class="preview-meta">
+            <span class="tag blue">{{ previewResult.row_count }} 行</span>
+            <span class="tag muted">{{ previewResult.duration_ms }}ms</span>
+            <span class="tag" v-for="s in previewResult.steps" :key="s.step" :class="s.status === 'success' ? 'success' : 'failed'">
+              {{ s.name }} {{ s.duration_ms }}ms
+            </span>
+          </div>
+          <div class="preview-box">
+            <div class="preview-title">{{ previewResult.title }}</div>
+            <pre class="preview-content">{{ previewResult.content }}</pre>
+          </div>
+          <details class="raw-data" v-if="previewResult.rows && previewResult.rows.length">
+            <summary>查看原始数据（前 {{ previewResult.rows.length }} 行）</summary>
+            <pre>{{ pretty(previewResult.rows) }}</pre>
+          </details>
+        </div>
+        <footer class="modal-foot">
+          <span class="muted">预览只渲染，不会发送。</span>
+          <span class="spacer"></span>
+          <button class="btn primary" @click="closeModal">关闭</button>
+        </footer>
+      </template>
+
+      <!-- 运行详情 -->
+      <template v-if="modal.type === 'run'">
+        <header class="modal-head">
+          <h2>运行 #{{ runDetail && runDetail.id }} · {{ runDetail && runDetail.scenario_name }}</h2>
+          <button class="btn ghost icon" @click="closeModal">✕</button>
+        </header>
+        <div class="modal-body" v-if="runDetail">
+          <div class="preview-meta">
+            <span class="tag" :class="statusClass(runDetail.status)">{{ statusText(runDetail.status) }}</span>
+            <span class="tag muted">{{ triggerText(runDetail.trigger) }}</span>
+            <span class="tag muted">{{ runDetail.row_count }} 行</span>
+            <span class="tag muted">{{ runDetail.duration_ms }}ms</span>
+            <span class="tag muted">{{ runDetail.created_at }}</span>
+          </div>
+          <p class="run-message">{{ runDetail.message }}</p>
+          <div class="timeline">
+            <div class="tl-item" v-for="s in runDetail.steps" :key="s.id">
+              <span class="tl-dot" :class="s.status"></span>
+              <div class="tl-body">
+                <div class="tl-head">
+                  <b>{{ s.name }}</b>
+                  <span class="muted">{{ s.duration_ms }}ms</span>
+                </div>
+                <pre class="tl-detail">{{ prettyDetail(s.detail) }}</pre>
+              </div>
+            </div>
+          </div>
+          <div class="preview-box" v-if="runDetail.content">
+            <div class="preview-title">{{ runDetail.title }}</div>
+            <pre class="preview-content">{{ runDetail.content }}</pre>
+          </div>
+        </div>
+        <footer class="modal-foot">
+          <button class="btn ghost" @click="closeModal">关闭</button>
+          <span class="spacer"></span>
+          <button class="btn primary" @click="rerun">重发</button>
+        </footer>
+      </template>
+
+      <template v-if="modal.type === 'confirm'">
+        <header class="modal-head">
+          <h2>{{ modal.title }}</h2>
+        </header>
+        <div class="modal-body"><p>{{ modal.message }}</p></div>
+        <footer class="modal-foot">
+          <span class="spacer"></span>
+          <button class="btn ghost" @click="closeModal">取消</button>
+          <button class="btn danger" @click="modal.onOk()">确定</button>
+        </footer>
+      </template>
+    </div>
+  </div>
+
+  <div class="toast" v-if="toast" :class="toast.type">{{ toast.text }}</div>
+</div>
+
+<script src="/static/vendor/vue.global.prod.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
+
+

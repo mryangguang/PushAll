@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "url": {"type": "string", "title": "接口地址", "x-ui": {"widget": "text", "placeholder": "http://127.0.0.1:8765/api/dev/echo"}},
+    "method": {"type": "string", "title": "请求方法", "enum": ["POST", "PUT"], "default": "POST", "x-ui": {"widget": "select"}},
+    "headers": {"type": "string", "title": "请求头（JSON）", "x-ui": {"widget": "code", "rows": 3, "placeholder": "{\"Authorization\": \"Bearer xxx\"}"}},
+    "body_template": {
+      "type": "string",
+      "title": "请求体模板",
+      "description": "可用变量：title、content、message、data",
+      "x-ui": {"widget": "code", "rows": 5}
+    }
+  },
+  "required": ["url"]
+}
