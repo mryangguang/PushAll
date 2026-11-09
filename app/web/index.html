@@ -426,6 +426,10 @@
             <span class="muted">v{{ updateInfo.current }}</span>
           </template>
         </div>
+        <div class="release-notes" v-if="updateInfo && updateInfo.ok && updateInfo.update_available && updateInfo.notes">
+          <div class="rn-head">更新说明 <span class="muted">v{{ updateInfo.latest }}</span></div>
+          <pre class="rn-body">{{ updateInfo.notes }}</pre>
+        </div>
         <p class="help">启动时自动检查；有新版本会弹窗询问。更新只替换程序文件，保留 data、plugins、logs。若 GitHub 下载缓慢，可把安装包放到上面的 updates 目录，再点「下载并更新」离线安装。</p>
       </div>
 
@@ -624,6 +628,7 @@
 <script src="/static/app.js"></script>
 </body>
 </html>
+
 
 
 

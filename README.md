@@ -81,7 +81,7 @@ python -m venv .venv
 ### 自动更新
 
 - 启动 3 秒后自动检查 GitHub Releases（仓库公开，无需令牌），托盘和设置页也可手动「检查更新」。
-- 发现新版本会弹窗询问 → 下载 zip → SHA256 校验 → 退出并替换程序文件 → 自动重启。
+- 发现新版本会弹窗展示该版本 Release 说明，确认后下载 zip → SHA256 校验 → 退出并替换程序文件 → 自动重启。
 - 只替换程序文件，`data`、`plugins`、`logs` 原样保留。
 - 可在 `.env` 设置 `PUSHALL_UPDATE_REPO`（默认 `mryangguang/PushAll`）、`PUSHALL_UPDATE_MIRROR`（下载镜像）、`PUSHALL_UPDATE_DISABLED=1`（关闭自动检查）。
 
@@ -329,6 +329,7 @@ pyinstaller --noconfirm --windowed --name PushAll `
 - macOS / Linux 把 `--add-data` 的分号改成冒号（`app/web:app/web`）。
 - 首次打包后建议在无 Python 环境的机器上验证一遍；`plugins/` 与 `data/` 会生成在可执行文件旁。
 - 数据库驱动（oracledb / pymysql / psycopg）需按目标环境一起打包或在插件中延迟导入。
+
 
 
 

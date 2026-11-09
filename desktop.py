@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import re
 import socket
 import sys
 import threading
@@ -318,6 +319,20 @@ class DesktopApp:
         log("已启动更新脚本，准备退出当前进程")
         self.quit_app()
 
+    @staticmethod
+    def _format_notes(notes, limit: int = 1200) -> str:
+        """把 Release 的 Markdown 说明转成 MessageBox 里好读的纯文本。"""
+        text = str(notes or "").strip()
+        if not text:
+            return "（该版本没有填写更新说明）"
+        text = re.sub(r"^#{1,6}\s*", "", text, flags=re.MULTILINE)
+        text = text.replace("**", "").replace("`", "")
+        text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", text)
+        text = re.sub(r"^\s*[-*]\s+", "• ", text, flags=re.MULTILINE)
+        if len(text) > limit:
+            text = text[:limit].rstrip() + "\n…（说明过长，完整内容见 Release 页面）"
+        return text
+
     def _ask(self, title: str, message: str) -> bool:
         if str(os.getenv("PUSHALL_UPDATE_AUTO") or "").strip() in ("1", "true", "yes"):
             return True
@@ -505,6 +520,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 
