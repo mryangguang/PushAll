@@ -85,6 +85,13 @@ python -m venv .venv
 - 只替换程序文件，`data`、`plugins`、`logs` 原样保留。
 - 可在 `.env` 设置 `PUSHALL_UPDATE_REPO`（默认 `mryangguang/PushAll`）、`PUSHALL_UPDATE_MIRROR`（下载镜像）、`PUSHALL_UPDATE_DISABLED=1`（关闭自动检查）。
 
+### 发布新版本
+
+1. 修改 `app/settings.py` 中的 `VERSION`；
+2. 运行 `.\packaging\release.ps1`（自动打包、打 tag、创建/更新 GitHub Release，并上传 zip 与 sha256）。
+
+Release 标题统一为 `PushAll vX.Y.Z`，不加“便携版”等后缀，正文默认英文；可用 `-NotesFile` 指定说明文件，`-DryRun` 只预览不发布。
+
 **网络受限时（GitHub 下载慢/超时）**：
 
 1. 用浏览器手动下载 `PushAll-<版本>-win64.zip`；
@@ -322,6 +329,7 @@ pyinstaller --noconfirm --windowed --name PushAll `
 - macOS / Linux 把 `--add-data` 的分号改成冒号（`app/web:app/web`）。
 - 首次打包后建议在无 Python 环境的机器上验证一遍；`plugins/` 与 `data/` 会生成在可执行文件旁。
 - 数据库驱动（oracledb / pymysql / psycopg）需按目标环境一起打包或在插件中延迟导入。
+
 
 
 
