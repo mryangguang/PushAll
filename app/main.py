@@ -6,7 +6,7 @@ import json
 from collections import deque
 from contextlib import asynccontextmanager
 from datetime import datetime
-from threading import Lock
+from threading import Lock, Thread
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -199,6 +199,16 @@ def app_show():
     if not callback:
         raise HTTPException(status_code=409, detail="当前为服务模式，没有桌面窗口")
     callback()
+    return {"ok": True}
+
+
+@app.post("/api/app/quit")
+def app_quit():
+    """桌面端：请求当前实例退出（供新版本接管旧实例）。"""
+    callback = getattr(app.state, "quit_app", None)
+    if not callback:
+        raise HTTPException(status_code=409, detail="当前为服务模式，无法退出桌面窗口")
+    Thread(target=callback, daemon=True).start()
     return {"ok": True}
 
 
@@ -849,6 +859,7 @@ def index():
     if index_file.exists():
         return FileResponse(index_file)
     return JSONResponse({"detail": "前端文件缺失"}, status_code=500)
+
 
 
 

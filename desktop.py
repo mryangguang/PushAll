@@ -12,6 +12,7 @@ import ctypes
 import os
 import re
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -146,20 +147,75 @@ def wait_http(timeout: float = 25.0) -> bool:
     return False
 
 
+def existing_health() -> dict | None:
+    try:
+        resp = httpx.get(f"{URL}/api/health", timeout=1.0)
+        return resp.json() if resp.status_code == 200 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def wait_port_free(timeout: float = 10.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not port_open():
+            return True
+        time.sleep(0.2)
+    return not port_open()
+
+
+def stop_old_instance() -> bool:
+    """请旧实例退出；无响应时结束其他 PushAll 进程（排除自身）。"""
+    try:
+        httpx.post(f"{URL}/api/app/quit", timeout=3)
+    except Exception:  # noqa: BLE001
+        pass
+    if wait_port_free(5):
+        return True
+
+    log("旧实例未响应退出，结束其他 PushAll 进程")
+    try:
+        subprocess.run(
+            ["taskkill", "/F", "/IM", "PushAll.exe", "/FI", f"PID ne {os.getpid()}"],
+            capture_output=True,
+            timeout=15,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log(f"结束旧实例失败：{exc}")
+    return wait_port_free(10)
+
+
 class ServerManager:
     def __init__(self) -> None:
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
+        self._stop = False
 
     def start(self) -> None:
-        config = uvicorn.Config(
-            "app.main:app", host=HOST, port=PORT, log_level="warning", access_log=False
-        )
-        self._server = uvicorn.Server(config)
-        self._thread = threading.Thread(target=self._server.run, name="pushall-server", daemon=True)
+        self._stop = False
+        self._thread = threading.Thread(target=self._run_loop, name="pushall-server", daemon=True)
         self._thread.start()
 
+    def _run_loop(self) -> None:
+        # 端口可能还在 TIME_WAIT / 旧进程收尾中，失败后自动重试
+        for attempt in range(15):
+            if self._stop:
+                return
+            config = uvicorn.Config(
+                "app.main:app", host=HOST, port=PORT, log_level="warning", access_log=False
+            )
+            server = uvicorn.Server(config)
+            self._server = server
+            try:
+                server.run()
+            except BaseException as exc:  # noqa: BLE001
+                log(f"服务启动失败（第 {attempt + 1} 次）：{exc}")
+            if self._stop:
+                return
+            time.sleep(1)
+
     def stop(self) -> None:
+        self._stop = True
         server, thread = self._server, self._thread
         self._server = None
         self._thread = None
@@ -382,6 +438,13 @@ class DesktopApp:
             pass
         self.server.stop()
 
+        def _hard_exit() -> None:
+            time.sleep(0.8)
+            log("进程退出")
+            os._exit(0)
+
+        threading.Thread(target=_hard_exit, name="pushall-exit", daemon=True).start()
+
     # ----- 窗口事件 -----
     def on_closing(self) -> bool:
         """点关闭按钮时收进托盘；返回 False 表示阻止真正关闭。"""
@@ -424,15 +487,31 @@ class DesktopApp:
 def _run() -> int:
     ensure_icons()
 
-    # 已有实例：唤回窗口后直接退出
-    if http_ok(0.8):
+    # 已有实例：同版本唤回；旧版本则接管
+    existing = existing_health()
+    if existing:
+        old_version = str(existing.get("version") or "0")
         try:
-            if httpx.post(f"{URL}/api/app/show", timeout=1.5).status_code == 200:
-                return 0
+            from app.updater import parse_version
+
+            is_old = parse_version(old_version) < parse_version(VERSION)
         except Exception:  # noqa: BLE001
-            pass
-        webbrowser.open(URL)
-        return 0
+            is_old = False
+
+        if is_old:
+            log(f"检测到旧版本 v{old_version} 仍在运行，尝试接管")
+            if not stop_old_instance():
+                alert(f"检测到旧版本 v{old_version} 仍在运行。\n请右键系统托盘图标退出旧版本后重试。")
+                return 1
+            log("旧实例已退出，继续启动新版本")
+        else:
+            try:
+                if httpx.post(f"{URL}/api/app/show", timeout=1.5).status_code == 200:
+                    return 0
+            except Exception:  # noqa: BLE001
+                pass
+            webbrowser.open(URL)
+            return 0
 
     if port_open():
         alert(f"端口 {PORT} 已被其他程序占用，PushAll 无法启动。")
@@ -467,6 +546,7 @@ def _run() -> int:
 
     desktop = DesktopApp(server)
     fastapi_app.state.show_window = desktop.open_window
+    fastapi_app.state.quit_app = desktop.quit_app
     fastapi_app.state.update_now = desktop.check_updates
     desktop.start_tray()
 
@@ -537,6 +617,9 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+
 
 
 
