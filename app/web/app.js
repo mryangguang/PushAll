@@ -201,7 +201,7 @@ const app = createApp({
 
   methods: {
     /* ---------- 基础 ---------- */
-    async refreshAll() {
+    async refreshAll(retry = 0) {
       this.loading = true;
       try {
         const [meta, plugins, sources, channels, templates, scenarios] = await Promise.all([
@@ -219,6 +219,11 @@ const app = createApp({
           if (fresh) this.current = clone(fresh);
         }
       } catch (e) {
+        // 更新重启后服务可能还在收尾，自动重试，避免页面空白
+        if (retry < 3) {
+          setTimeout(() => this.refreshAll(retry + 1), 1000 * (retry + 1));
+          return;
+        }
         this.toastMsg("加载失败：" + e.message, "bad");
       } finally {
         this.loading = false;
@@ -230,6 +235,7 @@ const app = createApp({
       this.moreOpen = false;
       if (view === "runs") this.loadRuns();
       if (view === "settings") this.loadUpdateProxy();
+      if (view === "plugins" && !this.plugins.length) this.refreshAll();
     },
 
     toastMsg(text, type = "ok") {
@@ -762,6 +768,7 @@ const app = createApp({
 
 app.component("schema-form", SchemaForm);
 app.mount("#app");
+
 
 
 

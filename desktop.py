@@ -138,11 +138,17 @@ def http_ok(timeout: float = 1.0) -> bool:
         return False
 
 
-def wait_http(timeout: float = 25.0) -> bool:
+def wait_http(timeout: float = 25.0, expect_version: str | None = None) -> bool:
+    """等待服务就绪；指定 expect_version 时，避免误连到尚未退出的旧实例。"""
     deadline = time.time() + timeout
     while time.time() < deadline:
-        if http_ok(0.5):
-            return True
+        try:
+            resp = httpx.get(f"{URL}/api/health", timeout=1)
+            if resp.status_code == 200:
+                if not expect_version or str(resp.json().get("version")) == str(expect_version):
+                    return True
+        except Exception:  # noqa: BLE001
+            pass
         time.sleep(0.2)
     return False
 
@@ -231,7 +237,7 @@ class ServerManager:
                 break
             time.sleep(0.1)
         self.start()
-        return wait_http(20)
+        return wait_http(20, VERSION)
 
 
 # ---------------- 桌面应用 ----------------
@@ -530,7 +536,7 @@ def _run() -> int:
         log(f"读取更新代理配置失败：{_exc}")
     server = ServerManager()
     server.start()
-    if not wait_http():
+    if not wait_http(25, VERSION):
         server.stop()
         alert("服务启动失败，请检查依赖是否安装完整，或在命令行运行 desktop.py 查看错误。")
         return 1
@@ -617,6 +623,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 

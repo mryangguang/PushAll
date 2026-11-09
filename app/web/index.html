@@ -307,6 +307,7 @@
 
     <!-- ================= 插件 ================= -->
     <section v-if="view === 'plugins'" class="view">
+      <div class="empty-hint" v-if="!plugins.length">暂无插件，正在重试加载…（也可点右上角「刷新」）</div>
       <div class="plugin-grid">
         <div class="plugin-card" v-for="p in plugins" :key="p.id">
           <div class="pc-head">
@@ -677,6 +678,7 @@
 <script src="/static/app.js"></script>
 </body>
 </html>
+
 
 
 
