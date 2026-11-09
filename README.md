@@ -5,7 +5,7 @@
 
 本地单机 · 插件化 · 系统托盘常驻 · GitHub Releases 自动更新
 
-**当前版本：v0.1.3** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
+**当前版本：v0.1.4** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
 
 ---
 
@@ -50,6 +50,10 @@
 ---
 
 ## 最近更新
+
+### v0.1.4
+- 修复弹窗内按住鼠标拖选文字时，弹窗被误关闭的问题
+- 点击遮罩关闭、取消按钮、右上角关闭保持原有行为
 
 ### v0.1.3
 - 设置页新增「更新代理」：支持 HTTP / HTTPS / SOCKS5
@@ -442,4 +446,5 @@ Release 标题统一为 `PushAll vX.Y.Z`（英文，不加“便携版”等后�
 - 多用户与权限
 - 消息去重与限流
 - macOS / Linux 打包
+
 

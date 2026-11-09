@@ -51,7 +51,7 @@ def _int(env_name: str, default: int) -> int:
 
 
 APP_NAME = "PushAll 消息中心"
-VERSION = "0.1.3"
+VERSION = "0.1.4"
 
 DATA_DIR = _path("PUSHALL_DATA_DIR", BASE_DIR / "data")
 LOG_DIR = _path("PUSHALL_LOG_DIR", BASE_DIR / "logs")
@@ -73,6 +73,7 @@ BUILTIN_PLUGIN_DIR = RESOURCE_DIR / "app" / "plugins" / "builtin"
 def ensure_dirs() -> None:
     for path in (DATA_DIR, LOG_DIR, PLUGIN_DIR, UPDATES_DIR):
         path.mkdir(parents=True, exist_ok=True)
+
 
 
 

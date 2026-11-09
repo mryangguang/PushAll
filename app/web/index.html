@@ -497,7 +497,10 @@
   </main>
 
   <!-- ================= 弹窗 ================= -->
-  <div class="modal-mask" v-if="modal" @click.self="closeModal">
+  <div class="modal-mask" v-if="modal"
+       @mousedown.self="maskMouseDown = true"
+       @mouseup="scheduleMaskReset"
+       @click.self="onMaskClick">
     <div class="modal" :class="'modal-' + modal.type">
 
       <!-- 数据源 / 渠道表单 -->
@@ -674,6 +677,7 @@
 <script src="/static/app.js"></script>
 </body>
 </html>
+
 
 
 

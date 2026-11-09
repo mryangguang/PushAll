@@ -123,6 +123,7 @@ const app = createApp({
       updateProxy: { enabled: false, type: "http", host: "127.0.0.1", port: 1080, username: "", password: "", has_password: false },
       proxyTesting: false,
       proxyTest: null,
+      maskMouseDown: false,
       toast: null,
       _toastTimer: null,
       navs: [
@@ -269,6 +270,17 @@ const app = createApp({
       try { return JSON.stringify(JSON.parse(detail || "{}"), null, 2); } catch (e) { return detail || ""; }
     },
     closeModal() { this.modal = null; this.previewResult = null; this.runDetail = null; },
+
+    scheduleMaskReset() {
+      // mouseup 先于 click；延迟重置，保证 click.self 仍能读到本次的按下状态
+      setTimeout(() => { this.maskMouseDown = false; }, 0);
+    },
+
+    onMaskClick() {
+      if (!this.maskMouseDown) return;
+      this.maskMouseDown = false;
+      this.closeModal();
+    },
     ask(title, message, onOk) {
       this.modal = { type: "confirm", title, message, onOk };
     },
@@ -730,5 +742,6 @@ const app = createApp({
 
 app.component("schema-form", SchemaForm);
 app.mount("#app");
+
 
 
