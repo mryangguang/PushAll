@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+FROZEN = bool(getattr(sys, "frozen", False))
+# 只读资源：源码运行时是项目根；PyInstaller 打包后是 _internal
+RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+# 可写目录：数据、日志、用户插件都放 exe 同级，保证“解压即用、可整包搬走”
+APP_HOME = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
+BASE_DIR = APP_HOME
+WEB_DIR = RESOURCE_DIR / "app" / "web"
 
 
 def _load_env_file() -> None:
@@ -59,9 +66,10 @@ MAX_ROWS = _int("PUSHALL_MAX_ROWS", 500)
 LOG_KEEP_DAYS = _int("PUSHALL_LOG_KEEP_DAYS", 90)
 HTTP_TIMEOUT = _int("PUSHALL_HTTP_TIMEOUT", 20)
 
-BUILTIN_PLUGIN_DIR = Path(__file__).resolve().parent / "plugins" / "builtin"
+BUILTIN_PLUGIN_DIR = RESOURCE_DIR / "app" / "plugins" / "builtin"
 
 
 def ensure_dirs() -> None:
     for path in (DATA_DIR, LOG_DIR, PLUGIN_DIR):
         path.mkdir(parents=True, exist_ok=True)
+

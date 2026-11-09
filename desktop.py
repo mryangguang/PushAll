@@ -20,11 +20,13 @@ from pathlib import Path
 import httpx
 import uvicorn
 
-BASE_DIR = Path(__file__).resolve().parent
+from app.settings import APP_HOME, RESOURCE_DIR
+
+BASE_DIR = APP_HOME
 HOST = "127.0.0.1"
 PORT = int(os.getenv("PUSHALL_PORT", "8765") or 8765)
 URL = f"http://{HOST}:{PORT}"
-WEB_DIR = BASE_DIR / "app" / "web"
+WEB_DIR = RESOURCE_DIR / "app" / "web"
 ICON_PNG = WEB_DIR / "icon.png"
 ICON_ICO = WEB_DIR / "icon.ico"
 LOG_FILE = BASE_DIR / "logs" / "desktop.log"
@@ -185,12 +187,13 @@ class DesktopApp:
         self.quitting = False
         self.tray_ready = False
         self._notified = False
+        self.stop_event = threading.Event()
 
     def attach(self, window) -> None:
         self.window = window
 
-    # ----- GUI 线程启动后创建托盘 -----
-    def on_gui_ready(self) -> None:
+    # ----- 托盘（先于窗口启动，窗口失败时仍可常驻） -----
+    def start_tray(self) -> None:
         try:
             import pystray
             from PIL import Image
@@ -224,12 +227,13 @@ class DesktopApp:
     # ----- 托盘动作 -----
     def open_window(self, icon=None, item=None) -> None:
         if not self.window:
+            webbrowser.open(URL)
             return
         try:
             self.window.show()
             self.window.restore()
         except Exception:  # noqa: BLE001
-            pass
+            webbrowser.open(URL)
 
     def restart_service(self, icon=None, item=None) -> None:
         def work() -> None:
@@ -242,6 +246,8 @@ class DesktopApp:
                     self.window.load_url(URL)
                 except Exception:  # noqa: BLE001
                     pass
+            else:
+                webbrowser.open(URL)
             self._notify("服务已重启" if ok else "服务重启失败，请查看日志")
 
         threading.Thread(target=work, name="pushall-restart", daemon=True).start()
@@ -249,6 +255,7 @@ class DesktopApp:
     def quit_app(self, icon=None, item=None) -> None:
         log("用户从托盘退出")
         self.quitting = True
+        self.stop_event.set()
         try:
             if self.icon:
                 self.icon.stop()
@@ -334,25 +341,41 @@ def _run() -> int:
 
     from app.main import app as fastapi_app
 
-    window = webview.create_window(
-        "PushAll 消息中心",
-        URL,
-        width=1280,
-        height=840,
-        min_size=(1000, 660),
-        background_color="#f4f6fa",
-        text_select=True,
-    )
     desktop = DesktopApp(server)
-    desktop.attach(window)
     fastapi_app.state.show_window = desktop.open_window
-    log("主窗口已创建")
+    desktop.start_tray()
 
-    window.events.closing += desktop.on_closing
-    window.events.minimized += desktop.on_minimized
+    auto_quit = float(os.getenv("PUSHALL_AUTO_QUIT_SECONDS", "0") or 0)
+    if auto_quit > 0:
+        log(f"{auto_quit} 秒后自动退出（测试模式）")
+        threading.Timer(auto_quit, desktop.quit_app).start()
+
+    gui_ok = False
+    try:
+        window = webview.create_window(
+            "PushAll 消息中心",
+            URL,
+            width=1280,
+            height=840,
+            min_size=(1000, 660),
+            background_color="#f4f6fa",
+            text_select=True,
+        )
+        desktop.attach(window)
+        window.events.closing += desktop.on_closing
+        window.events.minimized += desktop.on_minimized
+        log("主窗口已创建")
+        webview.start(icon=str(ICON_ICO))
+        gui_ok = True
+    except Exception as exc:  # noqa: BLE001
+        log(f"窗口启动失败，改用浏览器：{type(exc).__name__}: {exc}")
 
     try:
-        webview.start(desktop.on_gui_ready, icon=str(ICON_ICO))
+        if not gui_ok:
+            # 缺少 WebView2 等情况下退化为浏览器，托盘与服务继续常驻
+            alert("无法创建桌面窗口（可能缺少 WebView2 运行时），已改用系统浏览器打开。")
+            webbrowser.open(URL)
+            desktop.stop_event.wait()
     finally:
         desktop.quitting = True
         try:
@@ -379,6 +402,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 

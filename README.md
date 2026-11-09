@@ -64,6 +64,21 @@ python -m venv .venv
 
 日志：`logs\desktop.log`。如果托盘启动失败，关闭窗口会直接退出，不会把程序"藏"起来。
 
+### Windows 便携版（解压即用）
+
+```powershell
+.\packaging\build.ps1
+```
+
+产物：
+
+- `dist\PushAll\`：可直接运行
+- `dist\PushAll-0.1.0-win64.zip`：拷到其他电脑解压即用
+
+内置 Python 运行时，目标机器**不需要安装 Python**。`data\`（配置与运行记录）、`logs\`、`plugins\` 都在 exe 同目录，整个文件夹可随意搬移；退出托盘程序后删除文件夹即完成卸载。
+
+> 首次运行 Windows 可能提示“未知发布者”，选择“更多信息 → 仍要运行”。若目标机器缺少 WebView2，程序会自动改用默认浏览器打开，托盘功能不受影响。
+
 ### macOS / Linux
 
 ```bash
@@ -256,6 +271,7 @@ PushAll/
 ├─ plugins/                # 用户插件
 ├─ examples/plugin-csv/    # 插件示例
 ├─ tools/smoke.py          # 冒烟测试
+├─ packaging/              # PyInstaller 打包配置与构建脚本
 ├─ desktop.py              # 桌面端：窗口 + 托盘 + 单实例
 ├─ 启动 PushAll.vbs        # 双击启动（无控制台窗口）
 ├─ 创建桌面快捷方式.ps1     # 生成带图标的桌面快捷方式
@@ -294,5 +310,6 @@ pyinstaller --noconfirm --windowed --name PushAll `
 - macOS / Linux 把 `--add-data` 的分号改成冒号（`app/web:app/web`）。
 - 首次打包后建议在无 Python 环境的机器上验证一遍；`plugins/` 与 `data/` 会生成在可执行文件旁。
 - 数据库驱动（oracledb / pymysql / psycopg）需按目标环境一起打包或在插件中延迟导入。
+
 
 

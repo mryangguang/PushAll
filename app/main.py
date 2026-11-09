@@ -17,7 +17,7 @@ from . import crypto, db, runner, scheduler, settings, templating
 from .plugins import loader
 from .plugins.loader import PluginError
 
-WEB_DIR = settings.BASE_DIR / "app" / "web"
+WEB_DIR = settings.WEB_DIR
 
 _echo_lock = Lock()
 _echo_log: deque = deque(maxlen=50)
@@ -756,6 +756,7 @@ def index():
     if index_file.exists():
         return FileResponse(index_file)
     return JSONResponse({"detail": "前端文件缺失"}, status_code=500)
+
 
 
 
