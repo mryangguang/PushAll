@@ -73,7 +73,7 @@ python -m venv .venv
 产物：
 
 - `dist\PushAll\`：可直接运行
-- `dist\PushAll-0.1.0-win64.zip`：拷到其他电脑解压即用
+- `dist\PushAll-<版本>-win64.zip`：拷到其他电脑解压即用
 
 内置 Python 运行时，目标机器**不需要安装 Python**。`data\`（配置与运行记录）、`logs\`、`plugins\` 都在 exe 同目录，整个文件夹可随意搬移；退出托盘程序后删除文件夹即完成卸载。
 
@@ -310,6 +310,7 @@ pyinstaller --noconfirm --windowed --name PushAll `
 - macOS / Linux 把 `--add-data` 的分号改成冒号（`app/web:app/web`）。
 - 首次打包后建议在无 Python 环境的机器上验证一遍；`plugins/` 与 `data/` 会生成在可执行文件旁。
 - 数据库驱动（oracledb / pymysql / psycopg）需按目标环境一起打包或在插件中延迟导入。
+
 
 
 

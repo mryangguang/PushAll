@@ -192,6 +192,23 @@ def app_show():
     return {"ok": True}
 
 
+@app.get("/api/update/check")
+def update_check():
+    from . import updater
+
+    return updater.check_latest()
+
+
+@app.post("/api/update/install")
+def update_install():
+    """桌面端：触发下载并安装更新（会有原生确认弹窗）。"""
+    callback = getattr(app.state, "update_now", None)
+    if not callback:
+        raise HTTPException(status_code=409, detail="当前为服务模式，请在桌面端检查更新")
+    callback()
+    return {"ok": True}
+
+
 @app.get("/api/meta")
 def meta():
     jobs = []
@@ -211,6 +228,7 @@ def meta():
         "data_dir": str(settings.DATA_DIR),
         "plugin_dir": str(settings.PLUGIN_DIR),
         "secret_enabled": crypto.enabled(),
+        "frozen": settings.FROZEN,
         "jobs": jobs,
     }
 
@@ -756,6 +774,7 @@ def index():
     if index_file.exists():
         return FileResponse(index_file)
     return JSONResponse({"detail": "前端文件缺失"}, status_code=500)
+
 
 
 

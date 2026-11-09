@@ -397,6 +397,38 @@
       </div>
 
       <div class="panel">
+        <h3>版本与更新</h3>
+        <div class="kv">
+          <div><span>当前版本</span><b>v{{ meta.version }}</b></div>
+          <div><span>更新来源</span><b>GitHub Releases</b></div>
+        </div>
+        <div class="inline-actions update-actions">
+          <button class="btn ghost" @click="checkUpdate" :disabled="updateChecking">
+            {{ updateChecking ? '检查中…' : '检查更新' }}
+          </button>
+          <button class="btn primary"
+                  v-if="updateInfo && updateInfo.ok && updateInfo.update_available && updateInfo.can_apply"
+                  @click="installUpdate">下载并更新</button>
+        </div>
+        <div class="update-result" v-if="updateInfo">
+          <template v-if="!updateInfo.ok">
+            <span class="tag failed">检查失败</span>
+            <span class="muted">{{ updateInfo.error }}</span>
+          </template>
+          <template v-else-if="updateInfo.update_available">
+            <span class="tag warning">发现新版本</span>
+            <span>最新 <b>v{{ updateInfo.latest }}</b>，当前 v{{ updateInfo.current }}</span>
+            <a :href="updateInfo.html_url" target="_blank" rel="noopener">查看 Release</a>
+          </template>
+          <template v-else>
+            <span class="tag success">已是最新</span>
+            <span class="muted">v{{ updateInfo.current }}</span>
+          </template>
+        </div>
+        <p class="help">启动时自动检查；有新版本会弹窗询问。更新只替换程序文件，保留 data、plugins、logs。</p>
+      </div>
+
+      <div class="panel">
         <h3>备份与恢复</h3>
         <div class="inline-actions">
           <button class="btn ghost" @click="exportData">导出配置 JSON</button>
@@ -591,5 +623,6 @@
 <script src="/static/app.js"></script>
 </body>
 </html>
+
 
 

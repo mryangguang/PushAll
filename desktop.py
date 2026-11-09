@@ -20,7 +20,7 @@ from pathlib import Path
 import httpx
 import uvicorn
 
-from app.settings import APP_HOME, RESOURCE_DIR
+from app.settings import APP_HOME, RESOURCE_DIR, VERSION
 
 BASE_DIR = APP_HOME
 HOST = "127.0.0.1"
@@ -188,6 +188,8 @@ class DesktopApp:
         self.tray_ready = False
         self._notified = False
         self.stop_event = threading.Event()
+        self._update_checking = False
+        self._last_update = None
 
     def attach(self, window) -> None:
         self.window = window
@@ -204,6 +206,7 @@ class DesktopApp:
         image = Image.open(ICON_PNG)
         menu = pystray.Menu(
             pystray.MenuItem("打开主界面", self.open_window, default=True),
+            pystray.MenuItem("检查更新", self.menu_check_updates),
             pystray.MenuItem("重启服务", self.restart_service),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("退出", self.quit_app),
@@ -234,6 +237,91 @@ class DesktopApp:
             self.window.restore()
         except Exception:  # noqa: BLE001
             webbrowser.open(URL)
+
+    # ----- 自动更新 -----
+    def menu_check_updates(self, icon=None, item=None) -> None:
+        self.check_updates(manual=True)
+
+    def check_updates(self, icon=None, item=None, manual: bool = True) -> None:
+        if self._update_checking:
+            if manual:
+                self._notify("正在检查更新，请稍候…")
+            return
+        self._update_checking = True
+
+        def work() -> None:
+            try:
+                self._run_update_flow(manual)
+            finally:
+                self._update_checking = False
+
+        log("检查更新" + ("（手动）" if manual else "（启动自动）"))
+        threading.Thread(target=work, name="pushall-update", daemon=True).start()
+
+    def _run_update_flow(self, manual: bool) -> None:
+        from app import updater
+
+        info = updater.check_latest()
+        self._last_update = info
+
+        if not info.get("ok"):
+            log(f"检查更新失败：{info.get('error')}")
+            if manual:
+                self._notify(f"检查更新失败：{info.get('error')}")
+            return
+
+        if not info.get("update_available"):
+            log(f"已是最新版本 {VERSION}")
+            if manual:
+                self._notify(f"已是最新版本 v{VERSION}")
+            return
+
+        latest = str(info.get("latest"))
+        log(f"发现新版本 {latest}（当前 {VERSION}）")
+
+        auto = str(os.getenv("PUSHALL_UPDATE_AUTO") or "").strip() in ("1", "true", "yes")
+        if not manual and not auto and updater.is_skipped(latest):
+            return
+
+        if not info.get("asset"):
+            self._notify(f"发现 v{latest}，但该版本没有可下载的安装包")
+            return
+
+        if not self._ask(
+            "发现新版本",
+            f"当前版本：v{VERSION}\n最新版本：v{latest}\n\n是否下载并更新？",
+        ):
+            updater.mark_skipped(latest)
+            log(f"用户跳过版本 {latest}")
+            return
+
+        self._notify(f"正在下载 v{latest}…")
+        try:
+            staged = updater.stage(info)
+        except Exception as exc:  # noqa: BLE001
+            log(f"下载更新失败：{exc}")
+            alert(f"下载更新失败：{exc}\n\n可稍后重试，或到 Release 页面手动下载。")
+            return
+
+        if not self._ask(
+            "更新已就绪",
+            f"v{latest} 已下载完成。\n\n现在退出并安装吗？程序会自动重启。",
+        ):
+            log("用户取消安装更新")
+            return
+
+        updater.launch_updater(staged, BASE_DIR, os.getpid(), restart=True)
+        log("已启动更新脚本，准备退出当前进程")
+        self.quit_app()
+
+    def _ask(self, title: str, message: str) -> bool:
+        if str(os.getenv("PUSHALL_UPDATE_AUTO") or "").strip() in ("1", "true", "yes"):
+            return True
+        try:
+            flags = 0x04 | 0x40 | 0x40000  # YESNO | ICONINFORMATION | TOPMOST
+            return ctypes.windll.user32.MessageBoxW(None, message, title, flags) == 6
+        except Exception:  # noqa: BLE001
+            return False
 
     def restart_service(self, icon=None, item=None) -> None:
         def work() -> None:
@@ -343,7 +431,18 @@ def _run() -> int:
 
     desktop = DesktopApp(server)
     fastapi_app.state.show_window = desktop.open_window
+    fastapi_app.state.update_now = desktop.check_updates
     desktop.start_tray()
+
+    try:
+        from app import updater as update_mod
+
+        if update_mod.enabled():
+            timer = threading.Timer(3.0, desktop.check_updates, kwargs={"manual": False})
+            timer.daemon = True
+            timer.start()
+    except Exception as exc:  # noqa: BLE001
+        log(f"初始化自动更新检查失败：{exc}")
 
     auto_quit = float(os.getenv("PUSHALL_AUTO_QUIT_SECONDS", "0") or 0)
     if auto_quit > 0:
@@ -402,6 +501,9 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+
 
 
 

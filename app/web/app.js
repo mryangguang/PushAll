@@ -118,6 +118,8 @@ const app = createApp({
       modal: null,
       previewResult: null,
       runDetail: null,
+      updateInfo: null,
+      updateChecking: false,
       toast: null,
       _toastTimer: null,
       navs: [
@@ -645,6 +647,26 @@ const app = createApp({
 
     pickImport() { this.$refs.importInput.click(); },
 
+    async checkUpdate() {
+      this.updateChecking = true;
+      try {
+        this.updateInfo = await api("/api/update/check");
+      } catch (e) {
+        this.updateInfo = { ok: false, error: e.message };
+      } finally {
+        this.updateChecking = false;
+      }
+    },
+
+    async installUpdate() {
+      try {
+        await api("/api/update/install", { method: "POST" });
+        this.toastMsg("已开始下载更新，请留意桌面弹窗");
+      } catch (e) {
+        this.toastMsg("启动更新失败：" + e.message, "bad");
+      }
+    },
+
     async importData(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -669,3 +691,4 @@ const app = createApp({
 
 app.component("schema-form", SchemaForm);
 app.mount("#app");
+

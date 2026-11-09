@@ -430,6 +430,11 @@ tr.clickable { cursor: pointer; }
 .kv span { color: var(--muted); }
 .kv code { background: #f4f7fb; padding: 3px 7px; border-radius: 5px; font-size: 12px; word-break: break-all; }
 
+.update-actions { margin-top: 12px; }
+.update-result { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; font-size: 13px; }
+.update-result a { color: var(--accent); text-decoration: none; }
+.update-result a:hover { text-decoration: underline; }
+
 .hidden { display: none; }
 .empty-hint { color: var(--muted); font-size: 13px; padding: 26px 10px; text-align: center; }
 
@@ -448,3 +453,4 @@ tr.clickable { cursor: pointer; }
   .schema-form { grid-template-columns: 1fr; }
   .radio-row { grid-template-columns: 1fr; }
 }
+
