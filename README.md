@@ -5,7 +5,7 @@
 
 本地单机 · 插件化 · 系统托盘常驻 · GitHub Releases 自动更新
 
-**当前版本：v0.1.6** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
+**当前版本：v0.1.7** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
 
 ---
 
@@ -50,6 +50,10 @@
 ---
 
 ## 最近更新
+
+### v0.1.7
+- 修复打包版 Oracle 数据源提示 `No module named 'oracledb'`
+- 内置 Oracle / MySQL / PostgreSQL 驱动（oracledb / pymysql / psycopg）
 
 ### v0.1.6
 - 修复更新后旧进程未退出，导致仍显示旧版本 / 反复更新的问题
@@ -141,7 +145,7 @@ python -m venv .venv
 - `dist\PushAll-<版本>-win64.zip`：拷到其他电脑解压即用
 - `dist\PushAll-<版本>-win64.zip.sha256`：发布校验文件
 
-内置 Python 运行时，目标机器**不需要安装 Python**。`data\`（配置与运行记录）、`logs\`、`plugins\` 均在 exe 同目录，整个文件夹可随意搬移；退出托盘程序后删除文件夹即完成卸载。
+内置 Python 运行时与数据库驱动（Oracle / MySQL / PostgreSQL），目标机器**不需要安装 Python**。`data\`（配置与运行记录）、`logs\`、`plugins\` 均在 exe 同目录，整个文件夹可随意搬移；退出托盘程序后删除文件夹即完成卸载。
 
 > 首次运行 Windows 可能提示“未知发布者”，选择“更多信息 → 仍要运行”。目标机器缺少 WebView2 时会自动改用默认浏览器，托盘功能不受影响。
 
@@ -455,6 +459,7 @@ Release 标题统一为 `PushAll vX.Y.Z`（英文，不加“便携版”等后�
 - 多用户与权限
 - 消息去重与限流
 - macOS / Linux 打包
+
 
 
 

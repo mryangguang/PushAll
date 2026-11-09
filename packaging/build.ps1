@@ -13,6 +13,14 @@ $versionMatch = Select-String -Path (Join-Path $root "app\settings.py") -Pattern
 if (-not $versionMatch) { throw "无法读取 app\settings.py 中的 VERSION" }
 $version = $versionMatch.Matches[0].Groups[1].Value
 
+# 打包版必须内置数据库驱动，否则 Oracle/MySQL/PostgreSQL 数据源会报 No module named
+& $python -c "import oracledb, pymysql, psycopg" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Output "Installing database drivers from requirements-db.txt ..."
+    & $python -m pip install -r (Join-Path $root "requirements-db.txt")
+    if ($LASTEXITCODE -ne 0) { throw "数据库驱动安装失败" }
+}
+
 & $python -m PyInstaller --noconfirm --clean "packaging\PushAll.spec"
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller 打包失败" }
 
@@ -35,5 +43,6 @@ if (-not $SkipZip) {
 }
 
 Write-Output "DIST: $dist"
+
 
 

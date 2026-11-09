@@ -28,17 +28,23 @@ datas += tree(ROOT / "app" / "plugins" / "builtin", "app/plugins/builtin")
 binaries = []
 hiddenimports = []
 
-for package in ("pythonnet", "clr_loader"):
+for package in ("pythonnet", "clr_loader", "oracledb", "pymysql", "psycopg"):
     pkg_datas, pkg_binaries, pkg_hidden = collect_all(package)
     datas += pkg_datas
     binaries += pkg_binaries
     hiddenimports += pkg_hidden
 
 hiddenimports += collect_submodules("uvicorn")
+hiddenimports += collect_submodules("cryptography")
 hiddenimports += collect_submodules("apscheduler")
 hiddenimports += [
     "app.main",
     "app.updater",
+    "oracledb.thin_impl",
+    "oracledb.base_impl",
+    "pymysql.connections",
+    "pymysql.cursors",
+    "psycopg.rows",
     "app.runner",
     "app.scheduler",
     "app.templating",
@@ -100,5 +106,7 @@ coll = COLLECT(
     upx=False,
     name="PushAll",
 )
+
+
 
 
