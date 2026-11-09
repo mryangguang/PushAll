@@ -5,7 +5,7 @@
 
 本地单机 · 插件化 · 系统托盘常驻 · GitHub Releases 自动更新
 
-**当前版本：v0.1.8** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
+**当前版本：v0.1.9** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
 
 ---
 
@@ -50,6 +50,10 @@
 ---
 
 ## 最近更新
+
+### v0.1.9
+- 修复安装目录含中文时自动更新不生效（cmd/robocopy 编码问题）
+- 更新改为新版本 exe 的 Python 更新模式，兼容中文路径
 
 ### v0.1.8
 - 修复更新自动重启后插件列表为空的问题
@@ -463,6 +467,7 @@ Release 标题统一为 `PushAll vX.Y.Z`（英文，不加“便携版”等后�
 - 多用户与权限
 - 消息去重与限流
 - macOS / Linux 打包
+
 
 
 

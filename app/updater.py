@@ -342,51 +342,121 @@ def stage(release: dict) -> Path:
 
 
 def launch_updater(source_dir: Path, app_dir: Path, pid: int | None = None, restart: bool = True) -> Path:
-    """生成更新脚本并后台启动；脚本会等待 pid 退出后再替换文件。"""
-    app_dir = app_dir.resolve()
+    """启动新版本自带的 Python 更新器，不依赖 cmd/robocopy，支持中文路径。"""
     source_dir = source_dir.resolve()
-    pid = pid or os.getpid()
+    app_dir = app_dir.resolve()
+    exe = source_dir / "PushAll.exe"
+    if not exe.exists():
+        raise FileNotFoundError(f"更新包缺少 PushAll.exe：{source_dir}")
 
-    script = Path(tempfile.gettempdir()) / f"pushall-update-{int(time.time())}.cmd"
-    log_file = app_dir / "logs" / "update.log"
-    restart_line = f'start "" "{app_dir / "PushAll.exe"}"' if restart else "rem restart skipped"
-
-    lines = [
-        "@echo off",
-        "chcp 65001 >nul",
-        "setlocal",
-        f'if not exist "{app_dir / "logs"}" mkdir "{app_dir / "logs"}"',
-        f'echo [%date% %time%] update start >> "{log_file}"',
-        ":wait_app",
-        f'powershell -NoProfile -WindowStyle Hidden -Command "if (Get-Process -Id {pid} -ErrorAction SilentlyContinue) {{ exit 0 }} else {{ exit 1 }}"',
-        "if not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait_app)",
-        f'robocopy "{source_dir}" "{app_dir}" /E /IS /IT /XD data plugins logs /XF .env /R:5 /W:2 >> "{log_file}" 2>&1',
-        "if errorlevel 8 (",
-        f'  echo [%date% %time%] update failed, robocopy code %errorlevel% >> "{log_file}"',
-        "  exit /b 1",
-        ")",
-        f'echo [%date% %time%] update done >> "{log_file}"',
-        restart_line,
-        "timeout /t 2 /nobreak >nul",
-        f'rmdir /S /Q "{source_dir}"',
-        '(goto) 2>nul & del "%~f0"',
+    args = [
+        str(exe),
+        "--apply-update",
+        "--source", str(source_dir),
+        "--app-dir", str(app_dir),
+        "--pid", str(pid or os.getpid()),
     ]
-    script.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8")
+    if not restart:
+        args.append("--no-restart")
 
     flags = 0
     if os.name == "nt":
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+        flags = getattr(subprocess, "DETACHED_PROCESS", 0x00000008) | getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200
+        )
     subprocess.Popen(
-        ["cmd.exe", "/c", str(script)],
-        cwd=str(app_dir),
+        args,
+        cwd=str(source_dir),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         creationflags=flags,
         close_fds=True,
     )
-    return script
+    return exe
 
+
+def apply_update_from_args(argv: list[str]) -> int:
+    """由新版本 exe 以 --apply-update 运行：等旧进程退出 → 复制文件 → 重启。"""
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="PushAll")
+    parser.add_argument("--apply-update", action="store_true")
+    parser.add_argument("--source", required=True)
+    parser.add_argument("--app-dir", required=True)
+    parser.add_argument("--pid", type=int, default=0)
+    parser.add_argument("--no-restart", action="store_true")
+    args, _ = parser.parse_known_args(argv[1:])
+
+    source = Path(args.source).resolve()
+    app_dir = Path(args.app_dir).resolve()
+    log_file = app_dir / "logs" / "update.log"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    def log(message: str) -> None:
+        try:
+            with log_file.open("a", encoding="utf-8") as handle:
+                handle.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {message}\n")
+        except OSError:
+            pass
+
+    log(f"python updater start: source={source} app={app_dir} pid={args.pid}")
+
+    if args.pid:
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            try:
+                out = subprocess.check_output(
+                    ["tasklist", "/FI", f"PID eq {args.pid}"], text=True, errors="ignore"
+                )
+            except Exception:  # noqa: BLE001
+                out = ""
+            if str(args.pid) not in out:
+                break
+            time.sleep(0.5)
+        else:
+            log("wait for old process timeout")
+            return 1
+    log("old process exited")
+
+    ignore = shutil.ignore_patterns("data", "plugins", "logs", ".env")
+    for attempt in range(5):
+        try:
+            shutil.copytree(source, app_dir, dirs_exist_ok=True, ignore=ignore)
+            break
+        except Exception as exc:  # noqa: BLE001
+            log(f"copy failed (attempt {attempt + 1}): {exc}")
+            time.sleep(1)
+    else:
+        log("update failed: copy error")
+        return 1
+    log("files copied")
+
+    flags = 0
+    if os.name == "nt":
+        flags = getattr(subprocess, "DETACHED_PROCESS", 0x00000008) | getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200
+        )
+
+    if not args.no_restart:
+        exe = app_dir / "PushAll.exe"
+        subprocess.Popen([str(exe)], cwd=str(app_dir), creationflags=flags, close_fds=True)
+        log("restarted")
+
+    # 清理临时目录（可选，失败不影响）
+    try:
+        cleanup = Path(tempfile.gettempdir()) / f"pushall-clean-{int(time.time())}.cmd"
+        cleanup.write_text(
+            "@echo off\r\n"
+            "timeout /t 3 /nobreak >nul\r\n"
+            f'rmdir /S /Q "{source}"\r\n'
+            '(goto) 2>nul & del "%~f0"\r\n',
+            encoding="utf-8",
+        )
+        subprocess.Popen(["cmd.exe", "/c", str(cleanup)], creationflags=flags, close_fds=True)
+    except Exception:  # noqa: BLE001
+        pass
+    return 0
 
 # ---------------- 跳过记录 ----------------
 
@@ -414,6 +484,7 @@ def mark_skipped(version: str) -> None:
         _state_file().write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
     except OSError:
         pass
+
 
 
 

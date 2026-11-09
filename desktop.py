@@ -610,6 +610,11 @@ def _run() -> int:
 
 
 def main() -> int:
+    if "--apply-update" in sys.argv:
+        from app.updater import apply_update_from_args
+
+        return apply_update_from_args(sys.argv)
+
     ensure_streams()
     try:
         return _run()
@@ -623,6 +628,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 
