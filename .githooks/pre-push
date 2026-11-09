@@ -1,0 +1,13 @@
+#!/bin/sh
+# 推送前：拦截敏感文件/密钥；提醒定期整理 README 与 About
+ROOT=$(git rev-parse --show-toplevel)
+if [ -x "$ROOT/.venv/Scripts/python.exe" ]; then
+  PY="$ROOT/.venv/Scripts/python.exe"
+elif [ -x "$ROOT/.venv/bin/python" ]; then
+  PY="$ROOT/.venv/bin/python"
+else
+  PY=python3
+fi
+
+"$PY" "$ROOT/tools/security_check.py" --history || exit 1
+"$PY" "$ROOT/tools/readme_status.py" || true

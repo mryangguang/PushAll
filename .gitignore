@@ -15,9 +15,9 @@ htmlcov/
 # ---------- 构建产物 ----------
 build/
 dist/
-*.spec
 *.egg-info/
 .eggs/
+# 注意：packaging/PushAll.spec 是源码，必须提交，不要忽略 *.spec
 
 # ---------- 运行时数据（本地生成，不提交） ----------
 data/
@@ -26,21 +26,53 @@ logs/
 *.db
 *.sqlite
 *.sqlite3
+*.dump
+*.bak
+*.tmp
+
+# ---------- 密钥与凭据 ----------
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+*.keystore
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+credentials.*
+secrets.*
+*.token
+
+# ---------- 业务数据导出（防止真实数据进入公开仓库） ----------
+*.xlsx
+*.xls
+*.csv
+*.pdf
+*.docx
+*.doc
 
 # ---------- 用户插件（保留目录） ----------
 plugins/*
 !plugins/.gitkeep
 
-# ---------- 本机与编辑器 ----------
+# ---------- 压缩包与本机文件 ----------
+*.zip
+*.7z
+*.rar
+*.tar
+*.gz
+*.sha256
 *.lnk
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# ---------- 编辑器 ----------
 .idea/
 .vscode/
-*.zip
-*.7z
-*.rar
+node_modules/
