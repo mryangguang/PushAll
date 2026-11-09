@@ -682,16 +682,30 @@ const app = createApp({
       }
     },
 
-    async saveUpdateProxy() {
+    async persistProxy(silent = false) {
       try {
         const payload = { ...this.updateProxy };
         delete payload.has_password;
         this.updateProxy = await api("/api/settings/update-proxy", { method: "PUT", body: JSON.stringify(payload) });
-        this.proxyTest = null;
-        this.toastMsg("更新代理已保存");
+        if (!silent) this.toastMsg("更新代理已保存");
+        return true;
       } catch (e) {
         this.toastMsg("保存失败：" + e.message, "bad");
+        return false;
       }
+    },
+
+    async onProxyToggle() {
+      const ok = await this.persistProxy(true);
+      if (ok) {
+        this.toastMsg(this.updateProxy.enabled ? "更新代理已启用" : "更新代理已关闭");
+      }
+
+    },
+
+    async saveUpdateProxy() {
+      await this.persistProxy(false);
+      this.proxyTest = null;
     },
 
     async testUpdateProxy() {
@@ -701,6 +715,12 @@ const app = createApp({
         const payload = { ...this.updateProxy };
         delete payload.has_password;
         this.proxyTest = await api("/api/settings/update-proxy/test", { method: "POST", body: JSON.stringify(payload) });
+        if (this.proxyTest && this.proxyTest.ok) {
+          // 测试成功后自动落库，避免只测试未保存
+          if (await this.persistProxy(true)) {
+            this.toastMsg("连接成功，代理配置已自动保存");
+          }
+        }
       } catch (e) {
         this.proxyTest = { ok: false, message: e.message };
       } finally {
@@ -742,6 +762,7 @@ const app = createApp({
 
 app.component("schema-form", SchemaForm);
 app.mount("#app");
+
 
 
 

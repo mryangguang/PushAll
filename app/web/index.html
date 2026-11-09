@@ -436,7 +436,7 @@
         <h3>更新代理</h3>
         <p class="help">仅用于检查 / 下载新版本，不影响数据源、钉钉、邮件等业务请求。</p>
         <label class="switch-line">
-          <span class="switch"><input type="checkbox" v-model="updateProxy.enabled"><i></i></span>
+          <span class="switch"><input type="checkbox" v-model="updateProxy.enabled" @change="onProxyToggle"><i></i></span>
           <span>启用更新代理</span>
         </label>
         <div class="grid-2 proxy-grid" v-if="updateProxy.enabled">
@@ -677,6 +677,7 @@
 <script src="/static/app.js"></script>
 </body>
 </html>
+
 
 
 

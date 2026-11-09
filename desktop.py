@@ -439,6 +439,16 @@ def _run() -> int:
         return 1
 
     log(f"启动桌面端，端口 {PORT}")
+    try:
+        from app import updater as _update_mod
+
+        _proxy_cfg = _update_mod.load_proxy_config()
+        if _proxy_cfg.get("enabled"):
+            log(f"更新代理：{_proxy_cfg.get('type')}://{_proxy_cfg.get('host')}:{_proxy_cfg.get('port')}")
+        else:
+            log("更新代理：未启用")
+    except Exception as _exc:  # noqa: BLE001
+        log(f"读取更新代理配置失败：{_exc}")
     server = ServerManager()
     server.start()
     if not wait_http():
@@ -527,6 +537,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 
