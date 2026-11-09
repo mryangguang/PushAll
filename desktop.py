@@ -288,10 +288,17 @@ class DesktopApp:
             self._notify(f"发现 v{latest}，但该版本没有可下载的安装包")
             return
 
-        if not self._ask(
-            "发现新版本",
-            f"当前版本：v{VERSION}\n最新版本：v{latest}\n\n是否下载并更新？",
-        ):
+        notes = self._format_notes(info.get("notes"))
+        message = (
+            f"当前版本：v{VERSION}\n"
+            f"最新版本：v{latest}\n\n"
+            f"更新说明：\n"
+            f"{'-' * 30}\n"
+            f"{notes}\n"
+            f"{'-' * 30}\n\n"
+            f"是否下载并更新？"
+        )
+        if not self._ask("发现新版本", message):
             updater.mark_skipped(latest)
             log(f"用户跳过版本 {latest}")
             return
