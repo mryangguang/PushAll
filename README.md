@@ -5,7 +5,7 @@
 
 本地单机 · 插件化 · 系统托盘常驻 · GitHub Releases 自动更新
 
-**当前版本：v0.1.2** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
+**当前版本：v0.1.3** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
 
 ---
 
@@ -50,6 +50,11 @@
 ---
 
 ## 最近更新
+
+### v0.1.3
+- 设置页新增「更新代理」：支持 HTTP / HTTPS / SOCKS5
+- 代理仅用于检查与下载新版本，不影响数据源、钉钉、邮件等业务请求
+- 支持用户名/密码、测试连接；密码不回显
 
 ### v0.1.2
 - 检测到新版本时，更新弹窗直接展示该 Release 的更新说明（Markdown 自动转纯文本）
@@ -136,6 +141,7 @@ python -m venv .venv
 - 确认后下载 zip → 校验大小与 SHA256 → 退出并替换程序文件 → 自动重启。
 - 只替换程序文件，`data`、`plugins`、`logs`、`.env` 原样保留。
 - 托盘「检查更新」、设置页「版本与更新」可手动触发。
+- 设置页「更新代理」可配置 HTTP / HTTPS / SOCKS5，仅作用于更新检查与下载；业务请求不受影响。
 
 相关配置（`.env`）：
 
@@ -279,6 +285,8 @@ class CsvSource(SourcePlugin):
 | GET | `/api/runs` / `/api/runs/{id}` | 运行记录与步骤 |
 | GET | `/api/cron/next?expr=` | 计算下次触发时间 |
 | GET | `/api/update/check` | 查询最新 Release |
+| GET/PUT | `/api/settings/update-proxy` | 读取/保存更新代理 |
+| POST | `/api/settings/update-proxy/test` | 测试更新代理 |
 | POST | `/api/update/install` | 桌面端触发下载安装 |
 | POST | `/api/app/show` | 唤回已有桌面窗口 |
 | GET | `/api/export` / POST `/api/import` | 配置导出/导入 |
@@ -319,6 +327,7 @@ class CsvSource(SourcePlugin):
 - 「导出配置」包含明文密钥，请妥善保管，不要提交到任何仓库。
 - 插件在同进程运行，只安装可信来源的插件。
 - 自动更新只从 GitHub Releases 下载，并做 SHA256 校验；也可用本地安装包离线更新。
+- 更新代理的密码保存在本地 SQLite（设置 `PUSHALL_SECRET_KEY` 时加密），接口不会回显密码。
 
 ---
 
@@ -433,3 +442,4 @@ Release 标题统一为 `PushAll vX.Y.Z`（英文，不加“便携版”等后�
 - 多用户与权限
 - 消息去重与限流
 - macOS / Linux 打包
+

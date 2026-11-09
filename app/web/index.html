@@ -432,6 +432,52 @@
         </div>
         <p class="help">启动时自动检查；有新版本会弹窗询问。更新只替换程序文件，保留 data、plugins、logs。若 GitHub 下载缓慢，可把安装包放到上面的 updates 目录，再点「下载并更新」离线安装。</p>
       </div>
+      <div class="panel">
+        <h3>更新代理</h3>
+        <p class="help">仅用于检查 / 下载新版本，不影响数据源、钉钉、邮件等业务请求。</p>
+        <label class="switch-line">
+          <span class="switch"><input type="checkbox" v-model="updateProxy.enabled"><i></i></span>
+          <span>启用更新代理</span>
+        </label>
+        <div class="grid-2 proxy-grid" v-if="updateProxy.enabled">
+          <div class="field">
+            <label>协议</label>
+            <select v-model="updateProxy.type">
+              <option value="http">HTTP</option>
+              <option value="https">HTTPS</option>
+              <option value="socks5">SOCKS5</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>端口</label>
+            <input type="number" min="1" max="65535" v-model.number="updateProxy.port">
+          </div>
+          <div class="field">
+            <label>主机</label>
+            <input v-model="updateProxy.host" placeholder="127.0.0.1">
+          </div>
+          <div class="field">
+            <label>用户名（可选）</label>
+            <input v-model="updateProxy.username" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>密码（可选）</label>
+            <input type="password" v-model="updateProxy.password"
+                   :placeholder="updateProxy.has_password ? '已保存，留空则不修改' : ''"
+                   autocomplete="new-password">
+          </div>
+        </div>
+        <div class="inline-actions proxy-actions">
+          <button class="btn ghost" @click="testUpdateProxy" :disabled="proxyTesting">
+            {{ proxyTesting ? '测试中…' : '测试连接' }}
+          </button>
+          <button class="btn primary" @click="saveUpdateProxy">保存</button>
+          <span v-if="proxyTest" class="proxy-test" :class="proxyTest.ok ? 'ok' : 'bad'">
+            {{ proxyTest.ok ? '连接成功' : '连接失败' }} · {{ proxyTest.message }}
+            <span v-if="proxyTest.latency_ms"> · {{ proxyTest.latency_ms }}ms</span>
+          </span>
+        </div>
+      </div>
 
       <div class="panel">
         <h3>备份与恢复</h3>
@@ -628,6 +674,7 @@
 <script src="/static/app.js"></script>
 </body>
 </html>
+
 
 
 

@@ -120,6 +120,9 @@ const app = createApp({
       runDetail: null,
       updateInfo: null,
       updateChecking: false,
+      updateProxy: { enabled: false, type: "http", host: "127.0.0.1", port: 1080, username: "", password: "", has_password: false },
+      proxyTesting: false,
+      proxyTest: null,
       toast: null,
       _toastTimer: null,
       navs: [
@@ -225,6 +228,7 @@ const app = createApp({
       this.view = view;
       this.moreOpen = false;
       if (view === "runs") this.loadRuns();
+      if (view === "settings") this.loadUpdateProxy();
     },
 
     toastMsg(text, type = "ok") {
@@ -658,6 +662,40 @@ const app = createApp({
       }
     },
 
+    async loadUpdateProxy() {
+      try {
+        this.updateProxy = await api("/api/settings/update-proxy");
+      } catch (e) {
+        // 保持默认值
+      }
+    },
+
+    async saveUpdateProxy() {
+      try {
+        const payload = { ...this.updateProxy };
+        delete payload.has_password;
+        this.updateProxy = await api("/api/settings/update-proxy", { method: "PUT", body: JSON.stringify(payload) });
+        this.proxyTest = null;
+        this.toastMsg("更新代理已保存");
+      } catch (e) {
+        this.toastMsg("保存失败：" + e.message, "bad");
+      }
+    },
+
+    async testUpdateProxy() {
+      this.proxyTesting = true;
+      this.proxyTest = null;
+      try {
+        const payload = { ...this.updateProxy };
+        delete payload.has_password;
+        this.proxyTest = await api("/api/settings/update-proxy/test", { method: "POST", body: JSON.stringify(payload) });
+      } catch (e) {
+        this.proxyTest = { ok: false, message: e.message };
+      } finally {
+        this.proxyTesting = false;
+      }
+    },
+
     async installUpdate() {
       try {
         await api("/api/update/install", { method: "POST" });
@@ -686,9 +724,11 @@ const app = createApp({
 
   mounted() {
     this.refreshAll();
+    this.loadUpdateProxy();
   }
 });
 
 app.component("schema-form", SchemaForm);
 app.mount("#app");
+
 

@@ -80,6 +80,12 @@ CREATE TABLE IF NOT EXISTS run_step (
     detail      TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS app_setting (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS plugin_state (
     plugin_id    TEXT PRIMARY KEY,
     enabled      INTEGER NOT NULL DEFAULT 1,
@@ -267,3 +273,20 @@ def channel_usage(channel_id: int) -> list[str]:
             names.append(row["name"])
     return names
 
+
+
+# ---------- 应用设置 ----------
+
+def get_setting(key: str, default: str = "") -> str:
+    with connect() as conn:
+        row = conn.execute("SELECT value FROM app_setting WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else default
+
+
+def set_setting(key: str, value: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO app_setting (key, value, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+            (key, value, now_text()),
+        )

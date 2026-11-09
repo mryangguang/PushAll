@@ -439,6 +439,12 @@ tr.clickable { cursor: pointer; }
 .rn-head { padding: 8px 12px; background: #f7f9fd; border-bottom: 1px solid var(--line); font-size: 12.5px; font-weight: 600; color: #46536a; }
 .rn-body { margin: 0; padding: 10px 12px; max-height: 220px; overflow: auto; white-space: pre-wrap; font-family: inherit; font-size: 12.5px; color: var(--muted); line-height: 1.65; }
 
+.proxy-grid { margin-top: 12px; }
+.proxy-actions { margin-top: 12px; }
+.proxy-test { font-size: 12.5px; }
+.proxy-test.ok { color: var(--green); }
+.proxy-test.bad { color: var(--red); }
+
 .hidden { display: none; }
 .empty-hint { color: var(--muted); font-size: 13px; padding: 26px 10px; text-align: center; }
 
@@ -457,5 +463,6 @@ tr.clickable { cursor: pointer; }
   .schema-form { grid-template-columns: 1fr; }
   .radio-row { grid-template-columns: 1fr; }
 }
+
 
 

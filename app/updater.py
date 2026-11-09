@@ -17,11 +17,11 @@ import tempfile
 import time
 import zipfile
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 
-from . import settings
+from . import crypto, db, settings
 
 DEFAULT_REPO = "mryangguang/PushAll"
 API_URL = "https://api.github.com/repos/{repo}/releases/latest"
@@ -38,6 +38,104 @@ def token() -> str:
 
 def enabled() -> bool:
     return (os.getenv("PUSHALL_UPDATE_DISABLED") or "").strip() not in ("1", "true", "yes")
+
+
+PROXY_KEY = "update_proxy"
+DEFAULT_PROXY = {
+    "enabled": False,
+    "type": "http",
+    "host": "127.0.0.1",
+    "port": 1080,
+    "username": "",
+    "password": "",
+}
+
+
+def load_proxy_config() -> dict:
+    """读取“仅更新使用”的代理配置。"""
+    cfg = dict(DEFAULT_PROXY)
+    raw = db.get_setting(PROXY_KEY, "")
+    if raw:
+        try:
+            data = crypto.loads(raw)
+            if isinstance(data, dict):
+                for key in cfg:
+                    if key in data:
+                        cfg[key] = data[key]
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        cfg["port"] = int(cfg.get("port") or 0)
+    except (TypeError, ValueError):
+        cfg["port"] = 0
+    return cfg
+
+
+def save_proxy_config(cfg: dict) -> dict:
+    data = {key: cfg.get(key, DEFAULT_PROXY[key]) for key in DEFAULT_PROXY}
+    data["port"] = int(data.get("port") or 0)
+    db.set_setting(PROXY_KEY, crypto.dumps(data))
+    return data
+
+
+def proxy_url(cfg: dict | None = None) -> str | None:
+    """把配置拼成 httpx 可用的代理 URL；未启用时返回 None。"""
+    cfg = cfg or load_proxy_config()
+    if not cfg.get("enabled"):
+        return None
+    scheme = str(cfg.get("type") or "http").lower()
+    if scheme not in ("http", "https", "socks5"):
+        raise ValueError("代理协议必须是 http、https 或 socks5")
+    host = str(cfg.get("host") or "").strip()
+    try:
+        port = int(cfg.get("port") or 0)
+    except (TypeError, ValueError):
+        port = 0
+    if not host or not (0 < port < 65536):
+        raise ValueError("代理主机或端口不合法")
+    auth = ""
+    username = str(cfg.get("username") or "")
+    password = str(cfg.get("password") or "")
+    if username:
+        auth = quote(username, safe="")
+        if password:
+            auth += ":" + quote(password, safe="")
+        auth += "@"
+    return f"{scheme}://{auth}{host}:{port}"
+
+
+def _client(timeout: float = 12) -> httpx.Client:
+    """更新专用 HTTP 客户端：只使用配置的更新代理，不读取系统/环境代理。"""
+    return httpx.Client(
+        timeout=httpx.Timeout(timeout, connect=min(15.0, timeout)),
+        follow_redirects=True,
+        proxy=proxy_url(),
+        trust_env=False,
+    )
+
+
+def test_proxy(cfg: dict | None = None, timeout: float = 15) -> dict:
+    """用给定配置访问 GitHub API，验证代理是否可用。"""
+    cfg = cfg or load_proxy_config()
+    if not cfg.get("enabled"):
+        return {"ok": False, "message": "更新代理未启用"}
+    try:
+        url = proxy_url(cfg)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "message": str(exc)}
+
+    started = time.time()
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True, proxy=url, trust_env=False) as client:
+            resp = client.get(API_URL.format(repo=repo()), headers=_headers())
+        latency = int((time.time() - started) * 1000)
+        return {"ok": resp.status_code == 200, "message": f"HTTP {resp.status_code}", "latency_ms": latency}
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "message": f"{type(exc).__name__}: {exc}",
+            "latency_ms": int((time.time() - started) * 1000),
+        }
 
 
 def parse_version(text: str) -> tuple[int, ...]:
@@ -62,9 +160,9 @@ def check_latest(timeout: float = 12) -> dict:
     """查询 GitHub 最新 Release，网络失败时返回 ok=False，不抛异常。"""
     base = {"current": settings.VERSION, "repo": repo()}
     try:
-        with httpx.Client(timeout=httpx.Timeout(timeout, connect=15.0), follow_redirects=True) as client:
+        with _client(timeout) as client:
             resp = client.get(API_URL.format(repo=repo()), headers=_headers())
-    except httpx.HTTPError as exc:
+    except Exception as exc:  # noqa: BLE001
         return {**base, "ok": False, "error": f"网络错误：{exc}"}
 
     if resp.status_code == 404:
@@ -140,7 +238,7 @@ def _download(url: str, target: Path, timeout: float = 600) -> None:
     for candidate in candidates:
         for attempt in range(2):
             try:
-                with httpx.Client(timeout=httpx.Timeout(timeout, connect=15.0), follow_redirects=True) as client:
+                with _client(timeout) as client:
                     with client.stream("GET", candidate, headers=headers) as resp:
                         resp.raise_for_status()
                         with target.open("wb") as handle:
@@ -316,6 +414,7 @@ def mark_skipped(version: str) -> None:
         _state_file().write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
     except OSError:
         pass
+
 
 
 

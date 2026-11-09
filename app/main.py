@@ -86,6 +86,16 @@ class EnabledIn(BaseModel):
     enabled: bool
 
 
+class UpdateProxyIn(BaseModel):
+    enabled: bool = False
+    type: str = "http"
+    host: str = "127.0.0.1"
+    port: int = 1080
+    username: str = ""
+    password: str = ""
+    clear_password: bool = False
+
+
 # ---------------- 序列化 ----------------
 
 def _loads(raw: str | None, default):
@@ -207,6 +217,70 @@ def update_install():
         raise HTTPException(status_code=409, detail="当前为服务模式，请在桌面端检查更新")
     callback()
     return {"ok": True}
+
+
+def _proxy_payload(body: UpdateProxyIn, old: dict | None = None) -> dict:
+    scheme = (body.type or "http").lower()
+    if scheme not in ("http", "https", "socks5"):
+        raise HTTPException(status_code=400, detail="代理协议必须是 http、https 或 socks5")
+    host = (body.host or "").strip()
+    if body.enabled and not host:
+        raise HTTPException(status_code=400, detail="启用代理时必须填写主机")
+    if body.enabled and not (0 < int(body.port) < 65536):
+        raise HTTPException(status_code=400, detail="端口必须在 1-65535 之间")
+
+    old = old or {}
+    if body.password:
+        password = body.password
+    elif body.clear_password:
+        password = ""
+    else:
+        password = str(old.get("password") or "")
+
+    return {
+        "enabled": bool(body.enabled),
+        "type": scheme,
+        "host": host,
+        "port": int(body.port),
+        "username": (body.username or "").strip(),
+        "password": password,
+    }
+
+
+def _proxy_public(cfg: dict) -> dict:
+    return {
+        "enabled": bool(cfg.get("enabled")),
+        "type": cfg.get("type", "http"),
+        "host": cfg.get("host", ""),
+        "port": cfg.get("port", 0),
+        "username": cfg.get("username", ""),
+        "password": "",
+        "has_password": bool(cfg.get("password")),
+    }
+
+
+@app.get("/api/settings/update-proxy")
+def get_update_proxy():
+    from . import updater
+
+    return _proxy_public(updater.load_proxy_config())
+
+
+@app.put("/api/settings/update-proxy")
+def set_update_proxy(body: UpdateProxyIn):
+    from . import updater
+
+    cfg = _proxy_payload(body, updater.load_proxy_config())
+    updater.save_proxy_config(cfg)
+    return _proxy_public(cfg)
+
+
+@app.post("/api/settings/update-proxy/test")
+def test_update_proxy(body: UpdateProxyIn):
+    from . import updater
+
+    cfg = _proxy_payload(body, updater.load_proxy_config())
+    return updater.test_proxy(cfg)
 
 
 @app.get("/api/meta")
@@ -775,6 +849,7 @@ def index():
     if index_file.exists():
         return FileResponse(index_file)
     return JSONResponse({"detail": "前端文件缺失"}, status_code=500)
+
 
 
 
