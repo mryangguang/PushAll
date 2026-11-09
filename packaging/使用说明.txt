@@ -13,6 +13,11 @@ PushAll 消息中心 v0.1.1（Windows 便携版）
 程序启动后会自动向 GitHub Releases 检查新版本，发现新版本会弹窗询问。
 更新只替换程序文件，data、plugins、logs 会保留。
 
+如果下载慢或超时：
+1. 用浏览器下载 PushAll-<版本>-win64.zip
+2. 放到 data\updates\ 目录（文件名保持 Release 上的名字）
+3. 打开设置页点「下载并更新」，会优先使用本地包
+
 【数据位置】（都在 exe 同目录）
   data\pushall.db   配置与运行记录
   plugins\          第三方插件
@@ -25,4 +30,5 @@ PushAll 消息中心 v0.1.1（Windows 便携版）
 
 【卸载】
 退出托盘程序后，直接删除整个文件夹即可，不写注册表。
+
 

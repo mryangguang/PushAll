@@ -24,7 +24,7 @@ def test_versions() -> None:
         ("0.1.0", "0.1.0", False),
         ("v0.1.1.0", "0.1.1", False),
         ("v1.0.0", "0.9.9", True),
-        ("v0.2.0", "0.10.0", True),
+        ("v0.10.0", "0.2.0", True),
     ]
     for latest, current, expected in cases:
         actual = updater.is_newer(latest, current)
@@ -44,8 +44,18 @@ def test_apply(info: dict) -> None:
     if not info.get("asset"):
         raise SystemExit("最新 Release 没有 zip 安装包")
 
-    print("[3/3] 下载并解压最新安装包…")
-    staged = updater.stage(info)
+    local = Path("dist") / f"PushAll-{info['latest']}-win64.zip"
+    if local.exists():
+        print(f"[3/3] 使用本地安装包验证：{local}")
+        sha_file = local.with_name(local.name + ".sha256")
+        if sha_file.exists():
+            expected = sha_file.read_text(encoding="utf-8").split()[0].lower()
+            assert updater._sha256(local) == expected, "本地包 SHA256 不匹配"
+            print("      SHA256 校验通过")
+        staged = updater.stage_from_archive(local, info["latest"])
+    else:
+        print("[3/3] 下载并解压最新安装包…")
+        staged = updater.stage(info)
     assert (staged / "PushAll.exe").exists(), "缺少 PushAll.exe"
     assert (staged / "_internal").exists(), "缺少 _internal"
 
@@ -81,3 +91,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+

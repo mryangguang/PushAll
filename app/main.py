@@ -227,6 +227,7 @@ def meta():
         "timezone": settings.TIMEZONE,
         "data_dir": str(settings.DATA_DIR),
         "plugin_dir": str(settings.PLUGIN_DIR),
+        "updates_dir": str(settings.UPDATES_DIR),
         "secret_enabled": crypto.enabled(),
         "frozen": settings.FROZEN,
         "jobs": jobs,
@@ -774,6 +775,7 @@ def index():
     if index_file.exists():
         return FileResponse(index_file)
     return JSONResponse({"detail": "前端文件缺失"}, status_code=500)
+
 
 
 

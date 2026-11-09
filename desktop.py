@@ -300,7 +300,11 @@ class DesktopApp:
             staged = updater.stage(info)
         except Exception as exc:  # noqa: BLE001
             log(f"下载更新失败：{exc}")
-            alert(f"下载更新失败：{exc}\n\n可稍后重试，或到 Release 页面手动下载。")
+            if self._ask(
+                "下载失败",
+                f"更新包下载失败：\n{exc}\n\n是否打开 Release 页面手动下载？\n（下载后放到 data\\updates 目录，再点一次更新）",
+            ):
+                webbrowser.open(str(info.get("html_url") or URL))
             return
 
         if not self._ask(
@@ -501,6 +505,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 

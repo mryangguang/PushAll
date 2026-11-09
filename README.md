@@ -78,6 +78,18 @@ python -m venv .venv
 内置 Python 运行时，目标机器**不需要安装 Python**。`data\`（配置与运行记录）、`logs\`、`plugins\` 都在 exe 同目录，整个文件夹可随意搬移；退出托盘程序后删除文件夹即完成卸载。
 
 > 首次运行 Windows 可能提示“未知发布者”，选择“更多信息 → 仍要运行”。若目标机器缺少 WebView2，程序会自动改用默认浏览器打开，托盘功能不受影响。
+### 自动更新
+
+- 启动 3 秒后自动检查 GitHub Releases（仓库公开，无需令牌），托盘和设置页也可手动「检查更新」。
+- 发现新版本会弹窗询问 → 下载 zip → SHA256 校验 → 退出并替换程序文件 → 自动重启。
+- 只替换程序文件，`data`、`plugins`、`logs` 原样保留。
+- 可在 `.env` 设置 `PUSHALL_UPDATE_REPO`（默认 `mryangguang/PushAll`）、`PUSHALL_UPDATE_MIRROR`（下载镜像）、`PUSHALL_UPDATE_DISABLED=1`（关闭自动检查）。
+
+**网络受限时（GitHub 下载慢/超时）**：
+
+1. 用浏览器手动下载 `PushAll-<版本>-win64.zip`；
+2. 放到程序目录的 `data\updates\` 下（文件名与 Release 资产一致）；
+3. 打开设置页点「下载并更新」，程序会优先使用本地安装包并做 SHA256 校验。
 
 ### macOS / Linux
 
@@ -310,6 +322,7 @@ pyinstaller --noconfirm --windowed --name PushAll `
 - macOS / Linux 把 `--add-data` 的分号改成冒号（`app/web:app/web`）。
 - 首次打包后建议在无 Python 环境的机器上验证一遍；`plugins/` 与 `data/` 会生成在可执行文件旁。
 - 数据库驱动（oracledb / pymysql / psycopg）需按目标环境一起打包或在插件中延迟导入。
+
 
 
 

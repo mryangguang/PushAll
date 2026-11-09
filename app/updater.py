@@ -62,7 +62,7 @@ def check_latest(timeout: float = 12) -> dict:
     """查询 GitHub 最新 Release，网络失败时返回 ok=False，不抛异常。"""
     base = {"current": settings.VERSION, "repo": repo()}
     try:
-        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+        with httpx.Client(timeout=httpx.Timeout(timeout, connect=15.0), follow_redirects=True) as client:
             resp = client.get(API_URL.format(repo=repo()), headers=_headers())
     except httpx.HTTPError as exc:
         return {**base, "ok": False, "error": f"网络错误：{exc}"}
@@ -119,17 +119,41 @@ def _check_url(url: str) -> None:
         raise ValueError(f"下载地址不在 GitHub 域名下：{host}")
 
 
-def _download(url: str, target: Path, timeout: float = 300) -> None:
+def _mirror_url(url: str) -> str | None:
+    """PUSHALL_UPDATE_MIRROR 支持前缀或 {url} 模板，例如 https://ghproxy.net/"""
+    mirror = (os.getenv("PUSHALL_UPDATE_MIRROR") or "").strip()
+    if not mirror:
+        return None
+    if "{url}" in mirror:
+        return mirror.replace("{url}", url)
+    return mirror.rstrip("/") + "/" + url
+
+
+def _download(url: str, target: Path, timeout: float = 600) -> None:
     _check_url(url)
     headers = {"User-Agent": "PushAll-Updater"}
     if token():
         headers["Authorization"] = f"token {token()}"
-    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-        with client.stream("GET", url, headers=headers) as resp:
-            resp.raise_for_status()
-            with target.open("wb") as handle:
-                for chunk in resp.iter_bytes(65536):
-                    handle.write(chunk)
+
+    candidates = [u for u in (_mirror_url(url), url) if u]
+    last_error: Exception | None = None
+    for candidate in candidates:
+        for attempt in range(2):
+            try:
+                with httpx.Client(timeout=httpx.Timeout(timeout, connect=15.0), follow_redirects=True) as client:
+                    with client.stream("GET", candidate, headers=headers) as resp:
+                        resp.raise_for_status()
+                        with target.open("wb") as handle:
+                            for chunk in resp.iter_bytes(65536):
+                                handle.write(chunk)
+                return
+            except (httpx.HTTPError, OSError) as exc:
+                last_error = exc
+                time.sleep(1.5 * (attempt + 1))
+    raise RuntimeError(
+        f"下载失败（直连与镜像均不可用）：{last_error}。"
+        f"可手动下载后放到 data/updates/ 目录，再点一次更新。"
+    )
 
 
 def _sha256(path: Path) -> str:
@@ -152,33 +176,11 @@ def _safe_extract(archive: zipfile.ZipFile, target: Path) -> None:
     archive.extractall(target)
 
 
-def stage(release: dict) -> Path:
-    """下载并解压新版本，返回包含 PushAll.exe 的目录。"""
-    asset = release.get("asset")
-    if not asset or not asset.get("url"):
-        raise ValueError("该 Release 没有可用的 zip 安装包")
-
-    version = release.get("latest") or "latest"
+def _extract(archive_path: Path, version: str) -> Path:
     work = Path(tempfile.gettempdir()) / f"pushall-update-{version}"
     if work.exists():
         shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True, exist_ok=True)
-
-    archive_path = work / "update.zip"
-    _download(asset["url"], archive_path)
-
-    expected_size = int(asset.get("size") or 0)
-    if expected_size and archive_path.stat().st_size != expected_size:
-        raise ValueError("下载文件大小与 Release 不一致，可能下载不完整")
-
-    sha_url = release.get("sha256_url")
-    if sha_url:
-        sha_file = work / "update.zip.sha256"
-        _download(sha_url, sha_file)
-        text = sha_file.read_text(encoding="utf-8", errors="ignore")
-        match = re.search(r"[0-9a-fA-F]{64}", text)
-        if match and match.group(0).lower() != _sha256(archive_path):
-            raise ValueError("SHA256 校验失败，已取消更新")
 
     extract_dir = work / "extract"
     extract_dir.mkdir(parents=True, exist_ok=True)
@@ -190,6 +192,55 @@ def stage(release: dict) -> Path:
         raise ValueError("安装包内未找到 PushAll.exe")
     candidates.sort(key=lambda p: 0 if (p / "_internal").exists() else 1)
     return candidates[0]
+
+
+def stage_from_archive(archive_path: Path, version: str = "test") -> Path:
+    """直接解压本地安装包（供测试与离线更新使用）。"""
+    return _extract(Path(archive_path), version)
+
+
+def stage(release: dict) -> Path:
+    """准备安装包：优先使用 data/updates 下的同名文件，否则下载。"""
+    asset = release.get("asset")
+    if not asset or not asset.get("url"):
+        raise ValueError("该 Release 没有可用的 zip 安装包")
+
+    version = release.get("latest") or "latest"
+    name = str(asset.get("name") or "update.zip")
+
+    settings.ensure_dirs()
+    local = settings.UPDATES_DIR / name
+    if local.exists():
+        archive_path = local
+    else:
+        work = Path(tempfile.gettempdir()) / f"pushall-download-{version}"
+        if work.exists():
+            shutil.rmtree(work, ignore_errors=True)
+        work.mkdir(parents=True, exist_ok=True)
+        archive_path = work / "update.zip"
+        _download(asset["url"], archive_path)
+
+    expected_size = int(asset.get("size") or 0)
+    if expected_size and archive_path.stat().st_size != expected_size:
+        raise ValueError("安装包大小与 Release 不一致，可能下载不完整")
+
+    sha_text = ""
+    local_sha = local.with_name(local.name + ".sha256")
+    if local.exists() and local_sha.exists():
+        sha_text = local_sha.read_text(encoding="utf-8", errors="ignore")
+    elif release.get("sha256_url"):
+        sha_file = archive_path.with_name(archive_path.name + ".sha256")
+        try:
+            _download(str(release["sha256_url"]), sha_file)
+            sha_text = sha_file.read_text(encoding="utf-8", errors="ignore")
+        except Exception:  # noqa: BLE001 - 没拿到校验文件时退化为大小校验
+            sha_text = ""
+
+    match = re.search(r"[0-9a-fA-F]{64}", sha_text)
+    if match and match.group(0).lower() != _sha256(archive_path):
+        raise ValueError("SHA256 校验失败，已取消更新")
+
+    return _extract(archive_path, version)
 
 
 def launch_updater(source_dir: Path, app_dir: Path, pid: int | None = None, restart: bool = True) -> Path:
@@ -265,4 +316,7 @@ def mark_skipped(version: str) -> None:
         _state_file().write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
     except OSError:
         pass
+
+
+
 
