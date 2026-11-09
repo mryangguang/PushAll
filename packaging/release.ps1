@@ -27,7 +27,7 @@ if (-not (Test-Path $sha)) {
     "$hash  $zipName" | Set-Content -LiteralPath $sha -Encoding ascii
 }
 
-$body = "Windows portable build (unzip and run).`n`n- Bundled Python runtime, no installation required`n- Data, logs and plugins are stored next to the executable`n- Closing or minimizing sends the app to the system tray"
+$body = "Windows 便携版（解压即用）`n`n- 内置 Python 运行时，目标电脑无需安装 Python`n- 解压后双击 PushAll.exe 启动`n- 数据、日志、插件均在 exe 同目录`n- 关闭/最小化收进系统托盘"
 if ($NotesFile -and (Test-Path $NotesFile)) {
     $body = Get-Content -LiteralPath $NotesFile -Raw
 }
@@ -83,3 +83,4 @@ Invoke-RestMethod "https://uploads.github.com/repos/$repo/releases/$($release.id
 Invoke-RestMethod "https://uploads.github.com/repos/$repo/releases/$($release.id)/assets?name=$shaName" -Method Post -Headers $headers -InFile $sha -ContentType "text/plain" -TimeoutSec 60 | Out-Null
 
 Write-Output "Release: $($release.html_url)"
+
