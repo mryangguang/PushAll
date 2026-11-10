@@ -19,8 +19,14 @@
     "lib_dir": {
       "type": "string",
       "title": "Instant Client 目录",
-      "description": "thick 模式可选；留空则使用系统已安装的 Oracle Client",
-      "x-ui": {"widget": "text", "placeholder": "C:\\oracle\\instantclient_21_12"}
+      "description": "thick 模式必填（Oracle 11g 必须用 thick）；例如 C:\\oracle\\instantclient_19_25",
+      "x-ui": {"widget": "text", "placeholder": "C:\\oracle\\instantclient_19_25"}
+    },
+    "config_dir": {
+      "type": "string",
+      "title": "TNS 配置目录（可选）",
+      "description": "使用 tnsnames.ora 别名时填写其所在目录；Easy Connect（host:port/service）可留空",
+      "x-ui": {"widget": "text", "placeholder": "C:\\oracle\\network\\admin"}
     },
     "dsn": {
       "type": "string",
@@ -35,7 +41,7 @@
     "database": {
       "type": "string",
       "title": "数据库 / 服务名",
-      "description": "Oracle 填 service_name；MySQL / PostgreSQL 填库名",
+      "description": "Oracle 填 service_name 或 SID；MySQL / PostgreSQL 填库名",
       "x-ui": {"widget": "text"}
     },
     "query": {"type": "string", "title": "SQL 查询", "x-ui": {"widget": "code", "rows": 10, "language": "sql"}},
@@ -50,4 +56,5 @@
   },
   "required": ["driver", "query"]
 }
+
 

@@ -36,6 +36,30 @@ def _parse_json(raw: Any) -> dict:
         raise ValueError(f"绑定参数不是合法 JSON：{exc}") from exc
 
 
+def _friendly_error(exc: Exception) -> str:
+    text = str(exc)
+    if "DPY-3010" in text:
+        return (
+            "Oracle 数据库版本较旧（如 11g），python-oracledb 的 thin 模式不支持。"
+            "请安装 Oracle Instant Client（19c/21c x64），在数据源中选择 thick 模式并填写 Instant Client 目录。"
+        )
+    if "DPY-4027" in text:
+        return (
+            "DSN 使用了 TNS 别名，但未指定配置目录。"
+            "请填写 tnsnames.ora 所在目录（TNS 配置目录），或把 DSN 改成 host:port/service。"
+        )
+    if "DPY-4011" in text or "DPI-1047" in text:
+        return (
+            "未找到 Oracle Client 库。请安装 Oracle Instant Client（19c/21c x64），"
+            "并在数据源中填写 Instant Client 目录。"
+        )
+    if "DPY-6001" in text:
+        return "服务名不正确：监听器上没有该 Service，请核对 DSN 中的 service name。"
+    if "DPY-6003" in text:
+        return "SID 不正确：监听器上没有该 SID，请改用 service name。"
+    return text
+
+
 class SqlSource(SourcePlugin):
     id = "source.sql"
 
@@ -43,7 +67,7 @@ class SqlSource(SourcePlugin):
         try:
             rows = self.fetch({**config, "max_rows": 5}, RunContext())
         except Exception as exc:  # noqa: BLE001
-            return TestResult(ok=False, message=f"连接或查询失败：{exc}")
+            return TestResult(ok=False, message=f"连接或查询失败：{_friendly_error(exc)}")
         columns = list(rows[0].keys()) if rows else []
         return TestResult(
             ok=True,
@@ -83,20 +107,36 @@ class SqlSource(SourcePlugin):
     def _oracle(config: dict, query: str, params: dict) -> list[dict]:
         import oracledb
 
-        if str(config.get("mode") or "thin").lower() == "thick":
-            lib_dir = str(config.get("lib_dir") or "").strip()
+        mode = str(config.get("mode") or "thin").lower()
+        lib_dir = str(config.get("lib_dir") or "").strip()
+        config_dir = str(config.get("config_dir") or "").strip()
+
+        if mode == "thick":
             try:
-                oracledb.init_oracle_client(lib_dir=lib_dir or None)
+                oracledb.init_oracle_client(lib_dir=lib_dir or None, config_dir=config_dir or None)
             except oracledb.ProgrammingError:
                 pass  # 已初始化
+            except Exception as exc:  # noqa: BLE001
+                raise RuntimeError(f"Oracle Client 初始化失败：{_friendly_error(exc)}") from exc
 
-        dsn = str(config.get("dsn") or "").strip()
-        if not dsn:
-            host = config.get("host") or "127.0.0.1"
-            port = config.get("port") or 1521
-            service = config.get("database") or ""
-            dsn = f"{host}:{port}/{service}" if service else f"{host}:{port}"
-        conn = oracledb.connect(user=str(config.get("user") or ""), password=str(config.get("password") or ""), dsn=dsn)
+        host = str(config.get("host") or "").strip()
+        port = config.get("port") or 1521
+        service = str(config.get("database") or "").strip()
+        dsn_raw = str(config.get("dsn") or "").strip()
+
+        if dsn_raw:
+            # 纯名字 + 主机：按 service name 拼 Easy Connect（如 dsn=tsoa）
+            if config_dir or not host or ":" in dsn_raw or "/" in dsn_raw or dsn_raw.startswith("("):
+                dsn = dsn_raw
+            else:
+                dsn = f"{host}:{port}/{dsn_raw}"
+        else:
+            dsn = f"{host or '127.0.0.1'}:{port}/{service}" if service else f"{host or '127.0.0.1'}:{port}"
+
+        kwargs = {"user": str(config.get("user") or ""), "password": str(config.get("password") or ""), "dsn": dsn}
+        if mode != "thick" and config_dir:
+            kwargs["config_dir"] = config_dir
+        conn = oracledb.connect(**kwargs)
         try:
             cur = conn.cursor()
             cur.execute(query, params or None)
@@ -156,4 +196,5 @@ class SqlSource(SourcePlugin):
             return [dict(row) for row in cur.fetchall()]
         finally:
             conn.close()
+
 

@@ -5,7 +5,7 @@
 
 本地单机 · 插件化 · 系统托盘常驻 · GitHub Releases 自动更新
 
-**当前版本：v0.1.9** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
+**当前版本：v0.1.10** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
 
 ---
 
@@ -50,6 +50,10 @@
 ---
 
 ## 最近更新
+
+### v0.1.10
+- 优化 Oracle DSN 解析（服务名 + 主机自动拼 Easy Connect）与 TNS 配置目录
+- Oracle 11g 需要 thick 模式 + Instant Client，错误提示已明确说明
 
 ### v0.1.9
 - 修复安装目录含中文时自动更新不生效（cmd/robocopy 编码问题）
@@ -236,6 +240,8 @@ python -m venv .venv
 | `sink.webhook` | 下游 | 通用 Webhook，请求体支持模板 | network |
 
 内置插件位于 `app/plugins/builtin/`，可在「插件」页禁用，不能删除。
+
+> **Oracle 11g 注意**：thin 模式只支持 Oracle 12.1+。11g 请在数据源中选择 `thick`，安装 Oracle Instant Client 19c/21c x64 并填写 Instant Client 目录；DSN 可填 `tsoa` 或 `host:1521/tsoa`。
 
 ---
 
@@ -467,6 +473,7 @@ Release 标题统一为 `PushAll vX.Y.Z`（英文，不加“便携版”等后�
 - 多用户与权限
 - 消息去重与限流
 - macOS / Linux 打包
+
 
 
 
