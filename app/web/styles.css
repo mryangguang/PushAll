@@ -351,6 +351,7 @@ tr.clickable { cursor: pointer; }
 .pc-desc { color: var(--muted); font-size: 12.5px; min-height: 36px; margin: 10px 0; }
 .pc-foot { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); padding-top: 10px; }
 .perms { display: flex; gap: 5px; flex-wrap: wrap; }
+.pc-actions { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .pc-error { margin-top: 8px; color: var(--red); font-size: 12px; background: var(--red-weak); padding: 7px 9px; border-radius: 6px; }
 .plugin-tip { margin-top: 16px; }
 .plugin-tip p { color: var(--muted); font-size: 13px; margin: 0; }

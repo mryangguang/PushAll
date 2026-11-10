@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import crypto, db, runner, scheduler, settings, templating
+from . import crypto, db, plugin_settings, runner, scheduler, settings, templating
 from .plugins import loader
 from .plugins.loader import PluginError
 
@@ -79,6 +79,10 @@ class ScenarioIn(BaseModel):
 
 class ConfigTestIn(BaseModel):
     plugin_id: str
+    config: dict = Field(default_factory=dict)
+
+
+class PluginSettingsIn(BaseModel):
     config: dict = Field(default_factory=dict)
 
 
@@ -351,6 +355,38 @@ def enable_plugin(plugin_id: str, body: EnabledIn):
     return {"ok": True}
 
 
+@app.get("/api/plugins/{plugin_id}/settings")
+def get_plugin_settings(plugin_id: str):
+    plugin = loader.get_plugin(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail="插件不存在")
+    return {
+        "plugin_id": plugin.id,
+        "config": plugin_settings.get(plugin.id),
+        "schema": plugin.schema,
+    }
+
+
+@app.put("/api/plugins/{plugin_id}/settings")
+def put_plugin_settings(plugin_id: str, body: PluginSettingsIn):
+    plugin = loader.get_plugin(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail="插件不存在")
+    if plugin.error:
+        raise HTTPException(status_code=400, detail=f"插件不可用：{plugin.error}")
+    _validate_config(plugin.id, body.config)
+    plugin_settings.save(plugin.id, body.config)
+    return {"ok": True, "config": plugin_settings.get(plugin.id)}
+
+
+@app.delete("/api/plugins/{plugin_id}/settings")
+def clear_plugin_settings(plugin_id: str):
+    if not loader.get_plugin(plugin_id):
+        raise HTTPException(status_code=404, detail="插件不存在")
+    plugin_settings.clear(plugin_id)
+    return {"ok": True}
+
+
 @app.delete("/api/plugins/{plugin_id}")
 def remove_plugin(plugin_id: str):
     sources = [r for r in db.fetch_all("source") if r["plugin_id"] == plugin_id]
@@ -375,7 +411,7 @@ def list_sources():
 @app.post("/api/sources")
 def create_source(body: SourceIn):
     _check_plugin(body.plugin_id, "source")
-    _validate_config(body.plugin_id, body.config)
+    _validate_config(body.plugin_id, plugin_settings.merge(body.plugin_id, body.config))
     now = db.now_text()
     row_id = db.insert(
         "source",
@@ -394,7 +430,7 @@ def create_source(body: SourceIn):
 def update_source(source_id: int, body: SourceIn):
     _row_or_404("source", source_id)
     _check_plugin(body.plugin_id, "source")
-    _validate_config(body.plugin_id, body.config)
+    _validate_config(body.plugin_id, plugin_settings.merge(body.plugin_id, body.config))
     db.update(
         "source",
         source_id,
@@ -439,7 +475,7 @@ def delete_source(source_id: int):
 def test_source(body: ConfigTestIn):
     plugin = _check_plugin(body.plugin_id, "source")
     try:
-        result = plugin.instance.test(body.config)
+        result = plugin.instance.test(plugin_settings.merge(body.plugin_id, body.config))
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "message": f"{type(exc).__name__}: {exc}"}
     return {
@@ -461,7 +497,7 @@ def list_channels():
 @app.post("/api/channels")
 def create_channel(body: ChannelIn):
     _check_plugin(body.plugin_id, "sink")
-    _validate_config(body.plugin_id, body.config)
+    _validate_config(body.plugin_id, plugin_settings.merge(body.plugin_id, body.config))
     now = db.now_text()
     row_id = db.insert(
         "channel",
@@ -480,7 +516,7 @@ def create_channel(body: ChannelIn):
 def update_channel(channel_id: int, body: ChannelIn):
     _row_or_404("channel", channel_id)
     _check_plugin(body.plugin_id, "sink")
-    _validate_config(body.plugin_id, body.config)
+    _validate_config(body.plugin_id, plugin_settings.merge(body.plugin_id, body.config))
     db.update(
         "channel",
         channel_id,
@@ -524,9 +560,10 @@ def delete_channel(channel_id: int):
 @app.post("/api/channels/test")
 def test_channel(body: ConfigTestIn):
     plugin = _check_plugin(body.plugin_id, "sink")
-    _validate_config(body.plugin_id, body.config)
+    config = plugin_settings.merge(body.plugin_id, body.config)
+    _validate_config(body.plugin_id, config)
     try:
-        result = plugin.instance.test(body.config)
+        result = plugin.instance.test(config)
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "message": f"{type(exc).__name__}: {exc}"}
     return {"ok": result.ok, "message": result.message, "detail": result.detail or {}}

@@ -92,6 +92,12 @@ CREATE TABLE IF NOT EXISTS plugin_state (
     installed_at TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS plugin_setting (
+    plugin_id   TEXT PRIMARY KEY,
+    config_json TEXT NOT NULL DEFAULT '{}',
+    updated_at  TEXT NOT NULL DEFAULT ''
+);
+
 CREATE INDEX IF NOT EXISTS idx_run_scenario ON run(scenario_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_run_created ON run(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_step_run ON run_step(run_id, seq);
@@ -246,6 +252,34 @@ def set_plugin_enabled(plugin_id: str, enabled: bool) -> None:
             "ON CONFLICT(plugin_id) DO UPDATE SET enabled = excluded.enabled",
             (plugin_id, 1 if enabled else 0, now_text()),
         )
+
+
+# ---------- 插件级公共设置 ----------
+
+def plugin_settings(plugin_id: str) -> str:
+    with connect() as conn:
+        row = conn.execute("SELECT config_json FROM plugin_setting WHERE plugin_id = ?", (plugin_id,)).fetchone()
+        return row["config_json"] if row else ""
+
+
+def plugin_settings_ids() -> set[str]:
+    with connect() as conn:
+        rows = conn.execute("SELECT plugin_id FROM plugin_setting").fetchall()
+        return {row["plugin_id"] for row in rows}
+
+
+def save_plugin_settings(plugin_id: str, config_json: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO plugin_setting (plugin_id, config_json, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(plugin_id) DO UPDATE SET config_json = excluded.config_json, updated_at = excluded.updated_at",
+            (plugin_id, config_json, now_text()),
+        )
+
+
+def clear_plugin_settings(plugin_id: str) -> None:
+    with connect() as conn:
+        conn.execute("DELETE FROM plugin_setting WHERE plugin_id = ?", (plugin_id,))
 
 
 def source_usage(source_id: int) -> list[str]:

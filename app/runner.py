@@ -8,7 +8,7 @@ import time
 import traceback
 from typing import Any
 
-from . import crypto, db, templating
+from . import crypto, db, plugin_settings, templating
 from .plugins import loader
 from .plugins.base import RunContext, SendResult
 
@@ -58,7 +58,7 @@ def _load_source(scenario: dict) -> tuple[dict, Any, dict]:
         raise ScenarioError(f"数据源插件不可用：{source['plugin_id']} {getattr(plugin, 'error', '')}")
     if plugin.id in db.disabled_plugin_ids():
         raise ScenarioError(f"数据源插件已禁用：{plugin.name}")
-    config = crypto.loads(source.get("config_json"))
+    config = plugin_settings.merge(source["plugin_id"], crypto.loads(source.get("config_json")))
     return source, plugin, config
 
 
@@ -70,7 +70,7 @@ def _load_channels(scenario: dict) -> list[tuple[dict, Any, dict]]:
         if not channel:
             continue
         plugin = loader.get_plugin(channel["plugin_id"])
-        config = crypto.loads(channel.get("config_json"))
+        config = plugin_settings.merge(channel["plugin_id"], crypto.loads(channel.get("config_json")))
         result.append((channel, plugin, config))
     return result
 

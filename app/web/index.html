@@ -333,8 +333,12 @@
             <span class="perms">
               <span v-for="perm in p.permissions" :key="perm" class="tag muted">{{ perm }}</span>
               <span v-if="!p.permissions || !p.permissions.length" class="tag muted">无外部权限</span>
+              <span v-if="p.has_settings" class="tag green">已设置</span>
             </span>
-            <button class="link danger" v-if="!p.builtin" @click="uninstallPlugin(p)">卸载</button>
+            <span class="pc-actions">
+              <button class="link" v-if="pluginHasSettings(p)" @click="openPluginSettings(p)">设置</button>
+              <button class="link danger" v-if="!p.builtin" @click="uninstallPlugin(p)">卸载</button>
+            </span>
           </div>
           <div class="pc-error" v-if="p.error">{{ p.error }}</div>
         </div>
@@ -528,6 +532,7 @@
             </select>
           </div>
           <schema-form v-if="modalPlugin" :schema="modalPlugin.schema" v-model="modal.item.config"></schema-form>
+          <p class="help" v-if="modalPlugin && modalPlugin.has_settings">该插件已在「插件」页做过统一设置，下面留空的字段会自动使用插件设置。</p>
           <div class="test-box" v-if="modal.test">
             <div class="test-line" :class="modal.test.ok ? 'ok' : 'bad'">
               <b>{{ modal.test.ok ? '测试成功' : '测试失败' }}</b>
@@ -552,6 +557,43 @@
           <span class="spacer"></span>
           <button class="btn ghost" @click="closeModal">取消</button>
           <button class="btn primary" @click="saveModal">保存</button>
+        </footer>
+      </template>
+
+      <!-- 插件设置 -->
+      <template v-if="modal.type === 'plugin'">
+        <header class="modal-head">
+          <h2>插件设置 · {{ modal.item.name }}</h2>
+          <button class="btn ghost icon" @click="closeModal">✕</button>
+        </header>
+        <div class="modal-body">
+          <p class="help">这里填写的参数对该插件的所有数据源 / 渠道生效；数据源里填了同名字段时，以数据源为准。带 <span class="req">*</span> 的为必填项。</p>
+          <schema-form :schema="modal.item.schema" v-model="modal.item.config"></schema-form>
+          <div class="test-box" v-if="modal.test">
+            <div class="test-line" :class="modal.test.ok ? 'ok' : 'bad'">
+              <b>{{ modal.test.ok ? '测试成功' : '测试失败' }}</b>
+              <span>{{ modal.test.message }}</span>
+            </div>
+            <div class="table-wrap small" v-if="modal.test.rows && modal.test.rows.length">
+              <table>
+                <thead><tr><th v-for="c in modal.test.columns" :key="c">{{ c }}</th></tr></thead>
+                <tbody>
+                  <tr v-for="(r, i) in modal.test.rows" :key="i">
+                    <td v-for="c in modal.test.columns" :key="c">{{ r[c] }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <footer class="modal-foot">
+          <button class="btn ghost" @click="testPlugin" :disabled="modal.testing">
+            {{ modal.testing ? '测试中…' : '测试' }}
+          </button>
+          <span class="spacer"></span>
+          <button class="btn ghost" @click="clearPluginSettings">清空设置</button>
+          <button class="btn ghost" @click="closeModal">取消</button>
+          <button class="btn primary" @click="savePluginSettings">保存</button>
         </footer>
       </template>
 

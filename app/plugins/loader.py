@@ -168,6 +168,7 @@ def get_plugin(plugin_id: str) -> Plugin | None:
 
 def list_public() -> list[dict]:
     disabled = db.disabled_plugin_ids()
+    configured = db.plugin_settings_ids()
     items: list[dict] = []
     for plugin in all_plugins().values():
         items.append(
@@ -184,6 +185,7 @@ def list_public() -> list[dict]:
                 "builtin": plugin.builtin,
                 "error": plugin.error,
                 "enabled": bool(plugin.id) and plugin.id not in disabled and not plugin.error,
+                "has_settings": plugin.id in configured,
             }
         )
     return items

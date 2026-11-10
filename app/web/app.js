@@ -637,6 +637,74 @@ const app = createApp({
     },
 
     /* ---------- 插件 ---------- */
+    pluginHasSettings(p) {
+      return !!(p.schema && p.schema.properties && Object.keys(p.schema.properties).length);
+    },
+
+    async openPluginSettings(p) {
+      const cfg = this.defaultConfig(p);
+      this.modal = { type: "plugin", item: { id: p.id, name: p.name, type: p.type, schema: p.schema, config: cfg } };
+      try {
+        const data = await api(`/api/plugins/${encodeURIComponent(p.id)}/settings`);
+        if (this.modal && this.modal.type === "plugin") {
+          this.modal.item.config = { ...cfg, ...(data.config || {}) };
+        }
+      } catch (e) {
+        this.toastMsg("读取插件设置失败：" + e.message, "bad");
+      }
+    },
+
+    async savePluginSettings() {
+      const m = this.modal;
+      if (!m || !m.item) return;
+      try {
+        await api(`/api/plugins/${encodeURIComponent(m.item.id)}/settings`, {
+          method: "PUT",
+          body: JSON.stringify({ config: m.item.config || {} })
+        });
+        this.modal = null;
+        await this.refreshAll();
+        this.toastMsg("插件设置已保存");
+      } catch (e) {
+        this.toastMsg("保存失败：" + e.message, "bad");
+      }
+    },
+
+    clearPluginSettings() {
+      const m = this.modal;
+      if (!m || !m.item) return;
+      this.ask("清空插件设置", `确定清空「${m.item.name}」的插件设置？各数据源自己填写的配置不受影响。`, async () => {
+        try {
+          await api(`/api/plugins/${encodeURIComponent(m.item.id)}/settings`, { method: "DELETE" });
+          const plugin = this.plugins.find((x) => x.id === m.item.id) || { schema: m.item.schema };
+          m.item.config = this.defaultConfig(plugin);
+          m.test = null;
+          await this.refreshAll();
+          this.toastMsg("插件设置已清空");
+        } catch (e) {
+          this.toastMsg("清空失败：" + e.message, "bad");
+        }
+      });
+    },
+
+    async testPlugin() {
+      const m = this.modal;
+      if (!m || !m.item) return;
+      m.testing = true;
+      try {
+        const isSource = m.item.type === "source";
+        const res = await api(isSource ? "/api/sources/test" : "/api/channels/test", {
+          method: "POST",
+          body: JSON.stringify({ plugin_id: m.item.id, config: m.item.config || {} })
+        });
+        m.test = res;
+      } catch (e) {
+        m.test = { ok: false, message: e.message, rows: [] };
+      } finally {
+        m.testing = false;
+      }
+    },
+
     pickPluginZip() { this.$refs.zipInput.click(); },
 
     async installPlugin(event) {
