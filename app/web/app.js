@@ -113,6 +113,7 @@ const app = createApp({
       running: false,
       sourceTest: null,
       sourceTesting: false,
+      weekdayNames: ["周一", "周二", "周三", "周四", "周五", "周六", "周日"],
       nextRuns: [],
       runFilter: null,
       modal: null,
@@ -298,6 +299,73 @@ const app = createApp({
     },
 
     /* ---------- 场景 ---------- */
+    hourList() {
+      const raw = this.current && this.current.options ? this.current.options.send_hours : null;
+      if (!Array.isArray(raw)) return Array.from({ length: 24 }, (_, i) => i);
+      return raw.map(Number);
+    },
+    dayList() {
+      const raw = this.current && this.current.options ? this.current.options.send_weekdays : null;
+      if (!Array.isArray(raw)) return [1, 2, 3, 4, 5, 6, 7];
+      return raw.map(Number);
+    },
+    hourChecked(h) { return this.hourList().includes(h); },
+    dayChecked(d) { return this.dayList().includes(d); },
+    setHours(list) {
+      const uniq = [...new Set(list)].filter((h) => h >= 0 && h <= 23).sort((a, b) => a - b);
+      const opts = { ...(this.current.options || {}) };
+      if (uniq.length === 24) delete opts.send_hours;
+      else opts.send_hours = uniq;
+      this.current.options = opts;
+    },
+    setDays(list) {
+      const uniq = [...new Set(list)].filter((d) => d >= 1 && d <= 7).sort((a, b) => a - b);
+      const opts = { ...(this.current.options || {}) };
+      if (uniq.length === 7) delete opts.send_weekdays;
+      else opts.send_weekdays = uniq;
+      this.current.options = opts;
+    },
+    toggleHour(h, on) {
+      const set = new Set(this.hourList());
+      if (!on && set.size === 1) return this.toastMsg("至少保留 1 个小时，否则不会推送", "bad");
+      on ? set.add(h) : set.delete(h);
+      this.setHours([...set]);
+    },
+    toggleDay(d, on) {
+      const set = new Set(this.dayList());
+      if (!on && set.size === 1) return this.toastMsg("至少保留 1 天，否则不会推送", "bad");
+      on ? set.add(d) : set.delete(d);
+      this.setDays([...set]);
+    },
+    setAllHours() { this.setHours(Array.from({ length: 24 }, (_, i) => i)); },
+    setAllDays() { this.setDays([1, 2, 3, 4, 5, 6, 7]); },
+    presetHours(start, end) {
+      // 按钮写 9:00-18:00 时，选中的是 9~17 点
+      this.setHours(Array.from({ length: Math.max(1, end - start) }, (_, i) => start + i));
+    },
+    presetWorkdays() { this.setDays([1, 2, 3, 4, 5]); },
+    presetWeekend() { this.setDays([6, 7]); },
+    sendWindowText() {
+      const hours = this.hourList().slice().sort((a, b) => a - b);
+      const days = this.dayList().slice().sort((a, b) => a - b);
+      const dayText = days.length === 7 ? "每天" : days.map((d) => this.weekdayNames[d - 1]).join("、");
+      return `${dayText} ${this.hourRangeText(hours)} 推送`;
+    },
+    hourRangeText(hours) {
+      if (!hours.length) return "不推送";
+      if (hours.length === 24) return "全天";
+      const parts = [];
+      let start = hours[0];
+      let prev = hours[0];
+      for (const h of hours.slice(1)) {
+        if (h === prev + 1) { prev = h; continue; }
+        parts.push(start === prev ? `${start}:00` : `${start}:00-${prev + 1}:00`);
+        start = prev = h;
+      }
+      parts.push(start === prev ? `${start}:00` : `${start}:00-${prev + 1}:00`);
+      return parts.join("、");
+    },
+
     newScenario() {
       this.current = {
         id: null,
@@ -348,6 +416,9 @@ const app = createApp({
     async saveScenario() {
       if (!this.current) return;
       if (!(this.current.name || "").trim()) return this.toastMsg("请填写场景名称", "bad");
+      const opts = this.current.options || {};
+      if (Array.isArray(opts.send_hours) && opts.send_hours.length === 0) return this.toastMsg("推送时间至少选择 1 个小时", "bad");
+      if (Array.isArray(opts.send_weekdays) && opts.send_weekdays.length === 0) return this.toastMsg("推送星期至少选择 1 天", "bad");
       try {
         const payload = this.scenarioPayload();
         const saved = this.current.id

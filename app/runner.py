@@ -6,9 +6,11 @@ import json
 import threading
 import time
 import traceback
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from . import crypto, db, plugin_settings, templating
+from . import crypto, db, plugin_settings, settings, templating
 from .plugins import loader
 from .plugins.base import RunContext, SendResult
 
@@ -19,6 +21,36 @@ class ScenarioError(Exception):
 
 _locks: dict[int, threading.Lock] = {}
 _guard = threading.Lock()
+
+
+WEEKDAY_NAMES = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+
+
+def _int_list(raw: Any) -> list[int] | None:
+    if not isinstance(raw, list):
+        return None
+    values: list[int] = []
+    for item in raw:
+        try:
+            values.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    return values
+
+
+def send_window_blocked(options: dict, now: datetime) -> str:
+    """检查推送时间范围。返回空字符串表示允许推送，否则返回跳过原因。
+
+    options.send_hours: 允许推送的小时（0-23）；未设置表示不限，空数组表示全部禁止
+    options.send_weekdays: 允许推送的星期（1=周一 ... 7=周日）；未设置表示不限
+    """
+    hours = _int_list(options.get("send_hours"))
+    days = _int_list(options.get("send_weekdays"))
+    if hours is not None and now.hour not in hours:
+        return f"当前 {now:%H:%M} 不在允许推送的小时内"
+    if days is not None and now.isoweekday() not in days:
+        return f"今天是{WEEKDAY_NAMES[now.isoweekday() - 1]}，不在允许推送的星期内"
+    return ""
 
 
 def _lock_for(scenario_id: int) -> threading.Lock:
@@ -159,6 +191,14 @@ def _run_locked(scenario_id: int, trigger: str, payload: dict | None) -> dict:
     content = ""
     row_count = 0
     run_id: int | None = None
+
+    # 推送时间：定时 / 外部触发按配置的时间窗过滤；手动「立即运行」不受限制
+    if trigger != "manual":
+        now = datetime.now(ZoneInfo(settings.TIMEZONE))
+        blocked = send_window_blocked(_json(scenario.get("options_json"), {}), now)
+        if blocked:
+            message = f"{blocked}，本次已跳过推送"
+            return _finish(scenario, trigger, "skipped", message, 0, "", "", [], started_at, t_start)
 
     try:
         rows, duration, meta = fetch_rows(scenario, trigger)

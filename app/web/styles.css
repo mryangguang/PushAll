@@ -352,6 +352,23 @@ tr.clickable { cursor: pointer; }
 .pc-foot { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); padding-top: 10px; }
 .perms { display: flex; gap: 5px; flex-wrap: wrap; }
 .pc-actions { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.time-window { margin-top: 4px; }
+.hour-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 6px; margin: 8px 0 6px; }
+.day-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: 6px 0; }
+.hour-chip, .day-chip {
+  display: flex; align-items: center; justify-content: center;
+  padding: 6px 0; border: 1px solid var(--line); border-radius: 6px;
+  background: #fff; color: var(--muted); font-size: 12.5px;
+  cursor: pointer; user-select: none;
+}
+.hour-chip input, .day-chip input { display: none; }
+.hour-chip.on, .day-chip.on {
+  background: var(--accent-weak); border-color: var(--accent);
+  color: var(--accent); font-weight: 600;
+}
+.sub-label { display: block; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.window-actions { gap: 6px; margin-bottom: 2px; }
+.window-summary { color: var(--text); }
 .pc-error { margin-top: 8px; color: var(--red); font-size: 12px; background: var(--red-weak); padding: 7px 9px; border-radius: 6px; }
 .plugin-tip { margin-top: 16px; }
 .plugin-tip p { color: var(--muted); font-size: 13px; margin: 0; }

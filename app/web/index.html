@@ -190,6 +190,35 @@
                 <span>没有数据时也发送</span>
               </label>
             </div>
+
+            <div class="field time-window">
+              <label>推送时间</label>
+              <div class="help">默认全天全周推送；取消部分小时或星期后，定时 / 外部触发在这些时段会自动跳过（「立即运行」不受限制）。</div>
+              <div class="hour-grid">
+                <label v-for="h in 24" :key="h" class="hour-chip" :class="{ on: hourChecked(h - 1) }" :title="(h - 1) + ':00 - ' + h + ':00'">
+                  <input type="checkbox" :checked="hourChecked(h - 1)" @change="toggleHour(h - 1, $event.target.checked)">
+                  <span>{{ h - 1 }}</span>
+                </label>
+              </div>
+              <div class="inline-actions window-actions">
+                <button type="button" class="link" @click="setAllHours(true)">全部小时</button>
+                <button type="button" class="link" @click="presetHours(8, 22)">8:00-22:00</button>
+                <button type="button" class="link" @click="presetHours(9, 18)">9:00-18:00</button>
+              </div>
+              <label class="sub-label">推送星期</label>
+              <div class="day-grid">
+                <label v-for="(d, i) in weekdayNames" :key="d" class="day-chip" :class="{ on: dayChecked(i + 1) }">
+                  <input type="checkbox" :checked="dayChecked(i + 1)" @change="toggleDay(i + 1, $event.target.checked)">
+                  <span>{{ d }}</span>
+                </label>
+              </div>
+              <div class="inline-actions window-actions">
+                <button type="button" class="link" @click="setAllDays(true)">全选</button>
+                <button type="button" class="link" @click="presetWorkdays">仅工作日</button>
+                <button type="button" class="link" @click="presetWeekend">仅周末</button>
+              </div>
+              <div class="help window-summary">当前：{{ sendWindowText() }}</div>
+            </div>
           </div>
 
           <!-- 调度 -->
