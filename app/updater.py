@@ -419,10 +419,25 @@ def apply_update_from_args(argv: list[str]) -> int:
             return 1
     log("old process exited")
 
-    ignore = shutil.ignore_patterns("data", "plugins", "logs", ".env")
+    # 只排除“根目录”的 data/plugins/logs/.env；
+    # 不能排除 _internal/app/plugins（内置插件必须随版本更新）
+    root_source = source.resolve()
+
+    def _ignore(dir_path, names):
+        ignored = set()
+        try:
+            is_root = Path(dir_path).resolve() == root_source
+        except OSError:
+            is_root = False
+        if is_root:
+            for name in ("data", "plugins", "logs", ".env"):
+                if name in names:
+                    ignored.add(name)
+        return ignored
+
     for attempt in range(5):
         try:
-            shutil.copytree(source, app_dir, dirs_exist_ok=True, ignore=ignore)
+            shutil.copytree(source, app_dir, dirs_exist_ok=True, ignore=_ignore)
             break
         except Exception as exc:  # noqa: BLE001
             log(f"copy failed (attempt {attempt + 1}): {exc}")
@@ -430,7 +445,9 @@ def apply_update_from_args(argv: list[str]) -> int:
     else:
         log("update failed: copy error")
         return 1
-    log("files copied")
+    plugin_dir = app_dir / "_internal" / "app" / "plugins" / "builtin"
+    plugin_count = len(list(plugin_dir.glob("*/manifest.json"))) if plugin_dir.exists() else 0
+    log(f"files copied (builtin plugins: {plugin_count})")
 
     flags = 0
     if os.name == "nt":
@@ -484,6 +501,7 @@ def mark_skipped(version: str) -> None:
         _state_file().write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
     except OSError:
         pass
+
 
 
 
