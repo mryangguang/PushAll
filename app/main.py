@@ -408,6 +408,23 @@ def update_source(source_id: int, body: SourceIn):
     return _source_out(_row_or_404("source", source_id))
 
 
+@app.post("/api/sources/{source_id}/duplicate")
+def duplicate_source(source_id: int):
+    row = _row_or_404("source", source_id)
+    now = db.now_text()
+    new_id = db.insert(
+        "source",
+        {
+            "name": f"{row['name']} 副本",
+            "plugin_id": row["plugin_id"],
+            "config_json": row["config_json"],
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    return _source_out(_row_or_404("source", new_id))
+
+
 @app.delete("/api/sources/{source_id}")
 def delete_source(source_id: int):
     _row_or_404("source", source_id)
@@ -477,6 +494,23 @@ def update_channel(channel_id: int, body: ChannelIn):
     return _channel_out(_row_or_404("channel", channel_id))
 
 
+@app.post("/api/channels/{channel_id}/duplicate")
+def duplicate_channel(channel_id: int):
+    row = _row_or_404("channel", channel_id)
+    now = db.now_text()
+    new_id = db.insert(
+        "channel",
+        {
+            "name": f"{row['name']} 副本",
+            "plugin_id": row["plugin_id"],
+            "config_json": row["config_json"],
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    return _channel_out(_row_or_404("channel", new_id))
+
+
 @app.delete("/api/channels/{channel_id}")
 def delete_channel(channel_id: int):
     _row_or_404("channel", channel_id)
@@ -535,6 +569,23 @@ def update_template(template_id: int, body: TemplateIn):
         },
     )
     return _row_or_404("template", template_id)
+
+
+@app.post("/api/templates/{template_id}/duplicate")
+def duplicate_template(template_id: int):
+    row = _row_or_404("template", template_id)
+    now = db.now_text()
+    new_id = db.insert(
+        "template",
+        {
+            "name": f"{row['name']} 副本",
+            "title_tpl": row["title_tpl"],
+            "body_tpl": row["body_tpl"],
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    return _row_or_404("template", new_id)
 
 
 @app.delete("/api/templates/{template_id}")
@@ -859,6 +910,7 @@ def index():
     if index_file.exists():
         return FileResponse(index_file)
     return JSONResponse({"detail": "前端文件缺失"}, status_code=500)
+
 
 
 

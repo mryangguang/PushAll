@@ -395,16 +395,39 @@ const app = createApp({
       }
     },
 
-    duplicateScenario() {
+    async duplicateScenario() {
       if (!this.current || !this.current.id) return;
-      this.ask("复制场景", `确定复制「${this.current.name}」吗？副本默认停用。`, async () => {
-        try {
-          const created = await api(`/api/scenarios/${this.current.id}/duplicate`, { method: "POST" });
-          await this.refreshAll();
-          this.selectScenario(created.id);
-          this.toastMsg("已复制");
-        } catch (e) { this.toastMsg("复制失败：" + e.message, "bad"); }
-      });
+      try {
+        const created = await api(`/api/scenarios/${this.current.id}/duplicate`, { method: "POST" });
+        await this.refreshAll();
+        this.selectScenario(created.id);
+        this.toastMsg("已复制，副本默认停用");
+      } catch (e) {
+        this.toastMsg("复制失败：" + e.message, "bad");
+      }
+    },
+
+    async duplicateConfig(kind, item) {
+      const path = kind === "source" ? "sources" : "channels";
+      try {
+        const created = await api(`/api/${path}/${item.id}/duplicate`, { method: "POST" });
+        await this.refreshAll();
+        this.toastMsg("已复制，可直接修改名称");
+        this.openConfigModal(kind, created);
+      } catch (e) {
+        this.toastMsg("复制失败：" + e.message, "bad");
+      }
+    },
+
+    async duplicateTemplate(t) {
+      try {
+        const created = await api(`/api/templates/${t.id}/duplicate`, { method: "POST" });
+        await this.refreshAll();
+        this.toastMsg("已复制，可直接修改内容");
+        this.openTemplate(created.id);
+      } catch (e) {
+        this.toastMsg("复制失败：" + e.message, "bad");
+      }
     },
 
     removeScenario() {
@@ -768,6 +791,7 @@ const app = createApp({
 
 app.component("schema-form", SchemaForm);
 app.mount("#app");
+
 
 
 

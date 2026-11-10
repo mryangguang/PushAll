@@ -83,6 +83,7 @@
           <div class="detail-actions">
             <button class="btn ghost" @click="previewScenario" :disabled="!current.id">预览</button>
             <button class="btn ghost" @click="runScenario" :disabled="!current.id || running">{{ running ? '运行中…' : '立即运行' }}</button>
+            <button class="btn ghost" @click="duplicateScenario" :disabled="!current.id">复制</button>
             <button class="btn primary" @click="saveScenario">保存</button>
             <div class="more-wrap">
               <button class="btn ghost icon" @click="moreOpen = !moreOpen">⋯</button>
@@ -262,6 +263,7 @@
               <td>
                 <button class="link" @click="openConfigModal(view === 'sources' ? 'source' : 'channel', item)">编辑</button>
                 <button class="link" @click="quickTest(view === 'sources' ? 'source' : 'channel', item)">测试</button>
+                <button class="link" @click="duplicateConfig(view === 'sources' ? 'source' : 'channel', item)">复制</button>
                 <button class="link danger" @click="removeConfig(view === 'sources' ? 'source' : 'channel', item)">删除</button>
               </td>
             </tr>
@@ -294,6 +296,7 @@
               <td class="muted">{{ t.updated_at }}</td>
               <td>
                 <button class="link" @click="openTemplate(t.id)">编辑</button>
+                <button class="link" @click="duplicateTemplate(t)">复制</button>
                 <button class="link danger" @click="removeTemplate(t)">删除</button>
               </td>
             </tr>
@@ -678,6 +681,7 @@
 <script src="/static/app.js"></script>
 </body>
 </html>
+
 
 
 
