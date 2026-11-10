@@ -6,6 +6,7 @@ import base64
 import datetime as dt
 import decimal
 import json
+import os
 import sqlite3
 from typing import Any
 
@@ -112,8 +113,12 @@ class SqlSource(SourcePlugin):
         config_dir = str(config.get("config_dir") or "").strip()
 
         if mode == "thick":
+            # PyInstaller 冻结环境下直接传 lib_dir 可能触发 DPI-1072；
+            # 先把客户端目录加入 PATH，再让 oracledb 从 PATH 加载。
+            if lib_dir:
+                os.environ["PATH"] = lib_dir + os.pathsep + os.environ.get("PATH", "")
             try:
-                oracledb.init_oracle_client(lib_dir=lib_dir or None, config_dir=config_dir or None)
+                oracledb.init_oracle_client(lib_dir=None, config_dir=config_dir or None)
             except oracledb.ProgrammingError:
                 pass  # 已初始化
             except Exception as exc:  # noqa: BLE001
@@ -196,5 +201,6 @@ class SqlSource(SourcePlugin):
             return [dict(row) for row in cur.fetchall()]
         finally:
             conn.close()
+
 
 

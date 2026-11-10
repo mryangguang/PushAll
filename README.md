@@ -5,7 +5,7 @@
 
 本地单机 · 插件化 · 系统托盘常驻 · GitHub Releases 自动更新
 
-**当前版本：v0.1.11** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
+**当前版本：v0.1.12** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
 
 ---
 
@@ -50,6 +50,9 @@
 ---
 
 ## 最近更新
+
+### v0.1.12
+- 修复打包版 Oracle thick 模式加载 Instant Client 报 DPI-1072
 
 ### v0.1.11
 - 修复更新器误把 `_internal/app/plugins` 排除，导致内置插件不随版本更新
@@ -476,6 +479,7 @@ Release 标题统一为 `PushAll vX.Y.Z`（英文，不加“便携版”等后�
 - 多用户与权限
 - 消息去重与限流
 - macOS / Linux 打包
+
 
 
 
