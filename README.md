@@ -247,7 +247,23 @@ python -m venv .venv
 
 内置插件位于 `app/plugins/builtin/`，可在「插件」页禁用，不能删除。
 
-> **Oracle 11g 注意**：thin 模式只支持 Oracle 12.1+。11g 请在数据源中选择 `thick`，安装 Oracle Instant Client 19c/21c x64 并填写 Instant Client 目录；DSN 可填 `tsoa` 或 `host:1521/tsoa`。
+### Oracle 11g 配置（thin 模式不支持 11g）
+
+1. 下载 **Oracle Instant Client 19c/21c x64 Basic**，解压到例如 `C:\oracle\instantclient_19_25`；
+2. 数据源按以下方式填写：
+   - Oracle 连接模式：`thick`
+   - Instant Client 目录：`C:\oracle\instantclient_19_25`
+   - DSN：`tsoa` 或 `host:1521/tsoa`
+   - TNS 配置目录：留空（不使用 tnsnames.ora 时）
+3. 只读账号（如 `ecology_query`）查询时，表名需要带 `ECOLOGY.` 前缀；
+4. 常见错误对照：
+
+| 错误 | 含义 | 处理 |
+|---|---|---|
+| `DPY-3010` | thin 模式不支持该数据库版本（11g） | 改用 thick + Instant Client |
+| `DPI-1072` | 打包版加载客户端方式问题 | 升级到 v0.1.12+ |
+| `DPY-4027` | 用了 TNS 别名但没填配置目录 | 填 TNS 配置目录，或改用 host:port/service |
+| `DPY-6001` | 监听器上没有该 Service | 核对 DSN 的服务名 |
 
 ---
 
@@ -479,6 +495,7 @@ Release 标题统一为 `PushAll vX.Y.Z`（英文，不加“便携版”等后�
 - 多用户与权限
 - 消息去重与限流
 - macOS / Linux 打包
+
 
 
 
