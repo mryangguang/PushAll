@@ -292,6 +292,11 @@ const app = createApp({
     ask(title, message, onOk) {
       this.modal = { type: "confirm", title, message, onOk };
     },
+    confirmOk() {
+      const callback = this.modal ? this.modal.onOk : null;
+      this.modal = null;
+      if (typeof callback === "function") callback();
+    },
     copyText(text) {
       navigator.clipboard.writeText(text).then(
         () => this.toastMsg("已复制"),

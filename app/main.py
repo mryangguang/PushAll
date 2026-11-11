@@ -645,8 +645,11 @@ class TemplatePreviewIn(BaseModel):
 def preview_template(body: TemplatePreviewIn):
     scenario = {"id": 0, "name": "示例场景", "description": ""}
     ctx = templating.build_context(body.rows, scenario, "preview", {})
-    title = templating.render(body.title_tpl or templating.DEFAULT_TITLE, ctx).strip()
-    content = templating.render(body.body_tpl or templating.DEFAULT_BODY, ctx).strip()
+    try:
+        title = templating.render(body.title_tpl or templating.DEFAULT_TITLE, ctx).strip()
+        content = templating.render(body.body_tpl or templating.DEFAULT_BODY, ctx).strip()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"模板渲染失败：{exc}") from exc
     return {"title": title, "content": content, "count": len(body.rows)}
 
 

@@ -143,7 +143,10 @@ def preview(scenario_id: int, payload: dict | None = None) -> dict:
     )
 
     t0 = time.perf_counter()
-    title, content, _, template_row = _build_message(scenario, rows, "preview", payload)
+    try:
+        title, content, _, template_row = _build_message(scenario, rows, "preview", payload)
+    except Exception as exc:  # noqa: BLE001
+        raise ScenarioError(f"模板渲染失败：{exc}") from exc
     steps.append(
         {
             "seq": 2,
