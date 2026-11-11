@@ -77,7 +77,7 @@
       <div class="detail-pane" v-if="current">
         <div class="detail-head">
           <div class="detail-title">
-            <input class="title-input" v-model="current.name" placeholder="场景名称">
+            <h2 class="scenario-title" :title="current.name">{{ current.name || '未命名场景' }}</h2>
             <span class="tag" :class="current.enabled ? 'success' : 'muted'">{{ current.enabled ? '已启用' : '已停用' }}</span>
           </div>
           <div class="detail-actions">
