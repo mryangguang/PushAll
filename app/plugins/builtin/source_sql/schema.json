@@ -44,7 +44,9 @@
       "description": "Oracle 填 service_name 或 SID；MySQL / PostgreSQL 填库名",
       "x-ui": {"widget": "text"}
     },
-    "query": {"type": "string", "title": "SQL 查询", "x-ui": {"widget": "code", "rows": 10, "language": "sql"}},
+    "query": {"type": "string", "title": "SQL 查询",
+      "description": "可直接粘贴 SQL；结尾的分号会自动去掉（Oracle 报 ORA-00911 通常就是结尾多了分号）",
+      "x-ui": {"widget": "code", "rows": 10, "language": "sql"}},
     "params": {
       "type": "string",
       "title": "绑定参数（JSON）",

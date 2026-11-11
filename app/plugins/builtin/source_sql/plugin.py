@@ -37,8 +37,21 @@ def _parse_json(raw: Any) -> dict:
         raise ValueError(f"绑定参数不是合法 JSON：{exc}") from exc
 
 
+def _normalize_query(sql: str) -> str:
+    """去掉首尾空白与结尾分号，兼容从 SQL Developer / PLSQL Developer 直接粘贴。"""
+    text = str(sql or "").strip()
+    while text.endswith(";"):
+        text = text[:-1].rstrip()
+    return text
+
+
 def _friendly_error(exc: Exception) -> str:
     text = str(exc)
+    if "ORA-00911" in text:
+        return (
+            "SQL 中有非法字符：最常见是结尾多了英文分号（;），请删除后再试；"
+            "也请检查是否混入了中文标点（，；：（）等）。"
+        )
     if "DPY-3010" in text:
         return (
             "Oracle 数据库版本较旧（如 11g），python-oracledb 的 thin 模式不支持。"
@@ -80,7 +93,7 @@ class SqlSource(SourcePlugin):
 
     def fetch(self, config: dict, ctx: RunContext) -> list[dict]:
         driver = str(config.get("driver") or "oracle").lower()
-        query = str(config.get("query") or "").strip()
+        query = _normalize_query(config.get("query"))
         if not query:
             raise ValueError("SQL 不能为空")
         params = _parse_json(config.get("params"))
