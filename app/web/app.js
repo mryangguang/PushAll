@@ -114,6 +114,7 @@ const app = createApp({
       sourceTest: null,
       sourceTesting: false,
       weekdayNames: ["周一", "周二", "周三", "周四", "周五", "周六", "周日"],
+      pluginSettingsCache: {},
       nextRuns: [],
       runFilter: null,
       modal: null,
@@ -542,12 +543,44 @@ const app = createApp({
     },
 
     /* ---------- 数据源 / 渠道 ---------- */
-    openConfigModal(kind, item = null) {
+    async openConfigModal(kind, item = null) {
       const type = kind === "source" ? "source" : "sink";
       const list = this.pluginsByType(type);
       const base = item ? clone(item) : { id: null, name: "", plugin_id: (list[0] || {}).id || "", config: {} };
-      if (!item && list[0]) base.config = this.defaultConfig(list[0]);
       this.modal = { type: kind, item: base, test: null, testing: false };
+      const plugin = this.plugins.find((p) => p.id === base.plugin_id);
+      if (!plugin) return;
+      const saved = item ? item.config || {} : {};
+      const config = await this.withPluginDefaults(plugin, saved);
+      if (this.modal && this.modal.item === base) this.modal.item.config = config;
+    },
+
+    async fetchPluginSettings(pluginId) {
+      if (Object.prototype.hasOwnProperty.call(this.pluginSettingsCache, pluginId)) {
+        return this.pluginSettingsCache[pluginId];
+      }
+      let settings = {};
+      try {
+        const data = await api(`/api/plugins/${encodeURIComponent(pluginId)}/settings`);
+        settings = data.config || {};
+      } catch (e) {
+        settings = {};
+      }
+      this.pluginSettingsCache[pluginId] = settings;
+      return settings;
+    },
+
+    // 表单默认值 = schema 默认值 + 插件页设置；已保存的非空值优先（不会被覆盖）
+    async withPluginDefaults(plugin, saved) {
+      const merged = this.defaultConfig(plugin);
+      if (plugin && plugin.has_settings) {
+        Object.assign(merged, await this.fetchPluginSettings(plugin.id));
+      }
+      Object.entries(saved || {}).forEach(([key, value]) => {
+        if (value === null || value === undefined || value === "") return;
+        merged[key] = value;
+      });
+      return merged;
     },
 
     defaultConfig(plugin) {
@@ -561,10 +594,10 @@ const app = createApp({
       return cfg;
     },
 
-    onModalPluginChange() {
+    async onModalPluginChange() {
       const p = this.modalPlugin;
-      this.modal.item.config = p ? this.defaultConfig(p) : {};
       this.modal.test = null;
+      this.modal.item.config = p ? await this.withPluginDefaults(p, {}) : {};
     },
 
     async testModal() {
@@ -585,7 +618,7 @@ const app = createApp({
     },
 
     async quickTest(kind, item) {
-      this.openConfigModal(kind, item);
+      await this.openConfigModal(kind, item);
       await this.testModal();
     },
 
@@ -733,6 +766,7 @@ const app = createApp({
           method: "PUT",
           body: JSON.stringify({ config: m.item.config || {} })
         });
+        this.pluginSettingsCache[m.item.id] = { ...(m.item.config || {}) };
         this.modal = null;
         await this.refreshAll();
         this.toastMsg("插件设置已保存");
@@ -747,6 +781,7 @@ const app = createApp({
       this.ask("清空插件设置", `确定清空「${m.item.name}」的插件设置？各数据源自己填写的配置不受影响。`, async () => {
         try {
           await api(`/api/plugins/${encodeURIComponent(m.item.id)}/settings`, { method: "DELETE" });
+          delete this.pluginSettingsCache[m.item.id];
           const plugin = this.plugins.find((x) => x.id === m.item.id) || { schema: m.item.schema };
           m.item.config = this.defaultConfig(plugin);
           m.test = null;

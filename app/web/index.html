@@ -561,7 +561,7 @@
             </select>
           </div>
           <schema-form v-if="modalPlugin" :schema="modalPlugin.schema" v-model="modal.item.config"></schema-form>
-          <p class="help" v-if="modalPlugin && modalPlugin.has_settings">该插件已在「插件」页做过统一设置，下面留空的字段会自动使用插件设置。</p>
+          <p class="help" v-if="modalPlugin && modalPlugin.has_settings">已自动带出「插件」页的统一设置（可修改）；这里的修改只影响当前数据源 / 渠道，不会改回插件默认值。</p>
           <div class="test-box" v-if="modal.test">
             <div class="test-line" :class="modal.test.ok ? 'ok' : 'bad'">
               <b>{{ modal.test.ok ? '测试成功' : '测试失败' }}</b>
