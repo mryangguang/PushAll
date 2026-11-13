@@ -6,6 +6,7 @@ const api = async (path, options = {}) => {
   if (!(opts.body instanceof FormData) && opts.body !== undefined && !opts.headers["Content-Type"]) {
     opts.headers["Content-Type"] = "application/json";
   }
+  opts.cache = "no-store";
   const res = await fetch(path, opts);
   const text = await res.text();
   let data = null;
@@ -201,6 +202,12 @@ const app = createApp({
     }
   },
 
+  watch: {
+    runFilter() {
+      if (this.view === "runs") this.loadRuns();
+    }
+  },
+
   methods: {
     /* ---------- 基础 ---------- */
     async refreshAll(retry = 0) {
@@ -230,6 +237,12 @@ const app = createApp({
       } finally {
         this.loading = false;
       }
+    },
+
+    async refreshCurrent() {
+      if (this.view === "runs") return this.loadRuns(true);
+      if (this.view === "settings") return this.loadUpdateProxy();
+      return this.refreshAll();
     },
 
     go(view) {
@@ -720,10 +733,11 @@ const app = createApp({
     },
 
     /* ---------- 运行记录 ---------- */
-    async loadRuns() {
+    async loadRuns(notify = false) {
       try {
         const q = this.runFilter ? `?scenario_id=${this.runFilter}&limit=100` : "?limit=100";
-        this.runs = await api("/api/runs" + q);
+        this.runs = await api(`/api/runs${q}&_t=${Date.now()}`);
+        if (notify === true) this.toastMsg(`已刷新，共 ${this.runs.length} 条`);
       } catch (e) {
         this.toastMsg("加载运行记录失败：" + e.message, "bad");
       }

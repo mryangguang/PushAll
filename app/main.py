@@ -9,7 +9,7 @@ from datetime import datetime
 from threading import Lock, Thread
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -34,6 +34,21 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.APP_NAME, version=settings.VERSION, lifespan=lifespan)
+
+
+@app.middleware("http")
+async def no_store_api(request: Request, call_next):
+    """接口响应禁止缓存，避免 WebView / 浏览器拿到旧的运行记录等数据。"""
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/api"):
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    elif path == "/" or path.startswith("/static/"):
+        # 前端资源也不缓存：升级后必须立即用上新界面
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @app.middleware("http")
@@ -940,16 +955,28 @@ def dev_echo_list():
 
 # ---------------- 静态界面 ----------------
 
+class NoCacheStaticFiles(StaticFiles):
+    """静态资源禁止缓存：升级后立即生效，避免 WebView 用旧界面。"""
+
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        return response
+
+
 if WEB_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
+    app.mount("/static", NoCacheStaticFiles(directory=str(WEB_DIR)), name="static")
 
 
 @app.get("/")
 def index():
     index_file = WEB_DIR / "index.html"
-    if index_file.exists():
-        return FileResponse(index_file)
-    return JSONResponse({"detail": "前端文件缺失"}, status_code=500)
+    if not index_file.exists():
+        return JSONResponse({"detail": "前端文件缺失"}, status_code=500)
+    html = index_file.read_text(encoding="utf-8")
+    html = html.replace("{{ASSET_VERSION}}", settings.VERSION)
+    return HTMLResponse(html, headers={"Cache-Control": "no-store, max-age=0"})
 
 
 

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PushAll 消息中心</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/styles.css?v={{ASSET_VERSION}}">
 </head>
 <body>
 <div id="app" v-cloak>
@@ -40,7 +40,7 @@
         <p class="sub">{{ pageSubtitle }}</p>
       </div>
       <div class="top-actions">
-        <button class="btn ghost" @click="refreshAll" :disabled="loading">刷新</button>
+        <button class="btn ghost" @click="refreshCurrent" :disabled="loading">刷新</button>
         <button v-if="view === 'scenarios'" class="btn primary" @click="newScenario">+ 新建场景</button>
         <button v-if="view === 'sources'" class="btn primary" @click="openConfigModal('source')">+ 新建数据源</button>
         <button v-if="view === 'channels'" class="btn primary" @click="openConfigModal('channel')">+ 新建渠道</button>
@@ -386,7 +386,7 @@
           <option :value="null">全部场景</option>
           <option v-for="s in scenarios" :key="s.id" :value="s.id">{{ s.name }}</option>
         </select>
-        <button class="btn ghost" @click="loadRuns">刷新</button>
+        <button class="btn ghost" @click="loadRuns(true)">刷新</button>
       </div>
       <div class="table-wrap">
         <table class="list-table">
@@ -748,8 +748,8 @@
   <div class="toast" v-if="toast" :class="toast.type">{{ toast.text }}</div>
 </div>
 
-<script src="/static/vendor/vue.global.prod.js"></script>
-<script src="/static/app.js"></script>
+<script src="/static/vendor/vue.global.prod.js?v={{ASSET_VERSION}}"></script>
+<script src="/static/app.js?v={{ASSET_VERSION}}"></script>
 </body>
 </html>
 

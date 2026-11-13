@@ -27,7 +27,9 @@ from app.settings import APP_HOME, RESOURCE_DIR, VERSION
 BASE_DIR = APP_HOME
 HOST = "127.0.0.1"
 PORT = int(os.getenv("PUSHALL_PORT", "8765") or 8765)
-URL = f"http://{HOST}:{PORT}"
+BASE_URL = f"http://{HOST}:{PORT}"
+# 带版本号加载，避免 WebView 缓存旧页面
+URL = f"{BASE_URL}/?v={VERSION}"
 WEB_DIR = RESOURCE_DIR / "app" / "web"
 ICON_PNG = WEB_DIR / "icon.png"
 ICON_ICO = WEB_DIR / "icon.ico"
@@ -133,7 +135,7 @@ def port_open(timeout: float = 0.3) -> bool:
 
 def http_ok(timeout: float = 1.0) -> bool:
     try:
-        return httpx.get(f"{URL}/api/health", timeout=timeout).status_code == 200
+        return httpx.get(f"{BASE_URL}/api/health", timeout=timeout).status_code == 200
     except Exception:  # noqa: BLE001
         return False
 
@@ -143,7 +145,7 @@ def wait_http(timeout: float = 25.0, expect_version: str | None = None) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            resp = httpx.get(f"{URL}/api/health", timeout=1)
+            resp = httpx.get(f"{BASE_URL}/api/health", timeout=1)
             if resp.status_code == 200:
                 if not expect_version or str(resp.json().get("version")) == str(expect_version):
                     return True
@@ -155,7 +157,7 @@ def wait_http(timeout: float = 25.0, expect_version: str | None = None) -> bool:
 
 def existing_health() -> dict | None:
     try:
-        resp = httpx.get(f"{URL}/api/health", timeout=1.0)
+        resp = httpx.get(f"{BASE_URL}/api/health", timeout=1.0)
         return resp.json() if resp.status_code == 200 else None
     except Exception:  # noqa: BLE001
         return None
@@ -173,7 +175,7 @@ def wait_port_free(timeout: float = 10.0) -> bool:
 def stop_old_instance() -> bool:
     """请旧实例退出；无响应时结束其他 PushAll 进程（排除自身）。"""
     try:
-        httpx.post(f"{URL}/api/app/quit", timeout=3)
+        httpx.post(f"{BASE_URL}/api/app/quit", timeout=3)
     except Exception:  # noqa: BLE001
         pass
     if wait_port_free(5):
@@ -512,7 +514,7 @@ def _run() -> int:
             log("旧实例已退出，继续启动新版本")
         else:
             try:
-                if httpx.post(f"{URL}/api/app/show", timeout=1.5).status_code == 200:
+                if httpx.post(f"{BASE_URL}/api/app/show", timeout=1.5).status_code == 200:
                     return 0
             except Exception:  # noqa: BLE001
                 pass
