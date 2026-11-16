@@ -40,7 +40,7 @@
         <p class="sub">{{ pageSubtitle }}</p>
       </div>
       <div class="top-actions">
-        <button class="btn ghost" @click="refreshCurrent" :disabled="loading">刷新</button>
+        <button v-if="view !== 'runs'" class="btn ghost" @click="refreshCurrent" :disabled="loading">刷新</button>
         <button v-if="view === 'scenarios'" class="btn primary" @click="newScenario">+ 新建场景</button>
         <button v-if="view === 'sources'" class="btn primary" @click="openConfigModal('source')">+ 新建数据源</button>
         <button v-if="view === 'channels'" class="btn primary" @click="openConfigModal('channel')">+ 新建渠道</button>
@@ -387,6 +387,7 @@
           <option v-for="s in scenarios" :key="s.id" :value="s.id">{{ s.name }}</option>
         </select>
         <button class="btn ghost" @click="loadRuns(true)">刷新</button>
+        <span class="muted auto-refresh-hint">每 5 秒自动刷新</span>
       </div>
       <div class="table-wrap">
         <table class="list-table">

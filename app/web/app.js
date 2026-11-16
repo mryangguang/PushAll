@@ -129,6 +129,7 @@ const app = createApp({
       maskMouseDown: false,
       toast: null,
       _toastTimer: null,
+      _runsTimer: null,
       navs: [
         { key: "scenarios", label: "消息场景", icon: "◈" },
         { key: "sources", label: "数据源", icon: "▤" },
@@ -245,10 +246,30 @@ const app = createApp({
       return this.refreshAll();
     },
 
+    startRunsAutoRefresh() {
+      this.stopRunsAutoRefresh();
+      this._runsTimer = setInterval(() => {
+        if (this.view !== "runs" || document.hidden) return;
+        this.loadRuns(false);
+      }, 5000);
+    },
+
+    stopRunsAutoRefresh() {
+      if (this._runsTimer) {
+        clearInterval(this._runsTimer);
+        this._runsTimer = null;
+      }
+    },
+
     go(view) {
       this.view = view;
       this.moreOpen = false;
-      if (view === "runs") this.loadRuns();
+      if (view === "runs") {
+        this.loadRuns();
+        this.startRunsAutoRefresh();
+      } else {
+        this.stopRunsAutoRefresh();
+      }
       if (view === "settings") this.loadUpdateProxy();
       if (view === "plugins" && !this.plugins.length) this.refreshAll();
     },
@@ -974,6 +995,10 @@ const app = createApp({
         event.target.value = "";
       }
     }
+  },
+
+  beforeUnmount() {
+    this.stopRunsAutoRefresh();
   },
 
   mounted() {

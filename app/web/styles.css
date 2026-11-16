@@ -351,6 +351,7 @@ tr.clickable { cursor: pointer; }
 .pc-foot { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); padding-top: 10px; }
 .perms { display: flex; gap: 5px; flex-wrap: wrap; }
 .pc-actions { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.auto-refresh-hint { font-size: 12.5px; margin-left: 4px; }
 .time-window { margin-top: 4px; }
 .hour-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 6px; margin: 8px 0 6px; }
 .day-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: 6px 0; }
