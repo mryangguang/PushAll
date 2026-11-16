@@ -861,6 +861,18 @@ def export_data():
     }
 
 
+@app.post("/api/export/file")
+def export_file():
+    """把配置导出到 <数据目录>/exports/ 并返回完整路径，前端提示用户。"""
+    data = export_data()
+    folder = settings.DATA_DIR / "exports"
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    path = folder / f"pushall-backup-{stamp}.json"
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True, "path": str(path), "name": path.name}
+
+
 @app.post("/api/import")
 def import_data(data: dict):
     source_map: dict[int, int] = {}

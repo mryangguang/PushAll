@@ -524,7 +524,7 @@
           <button class="btn ghost" @click="pickImport">导入配置 JSON</button>
           <input ref="importInput" type="file" accept=".json" class="hidden" @change="importData">
         </div>
-        <p class="help">导出内容包含 webhook 与密码等敏感字段，请妥善保管。导入会追加记录，不会覆盖现有数据。</p>
+        <p class="help">导出会保存到程序数据目录下的 <code>exports</code> 文件夹，并显示完整路径。导出内容包含 webhook 与密码等敏感字段，请妥善保管。导入会追加记录，不会覆盖现有数据。</p>
       </div>
 
       <div class="panel">
@@ -624,6 +624,24 @@
           <button class="btn ghost" @click="clearPluginSettings">清空设置</button>
           <button class="btn ghost" @click="closeModal">取消</button>
           <button class="btn primary" @click="savePluginSettings">保存</button>
+        </footer>
+      </template>
+
+      <!-- 导出结果 -->
+      <template v-if="modal.type === 'export'">
+        <header class="modal-head">
+          <h2>配置已导出</h2>
+          <button class="btn ghost icon" @click="closeModal">✕</button>
+        </header>
+        <div class="modal-body">
+          <p>文件已保存到：</p>
+          <div class="path-box mono">{{ modal.path }}</div>
+          <p class="help">文件名：{{ modal.name }}；包含 webhook、密码等敏感字段，请妥善保管。</p>
+        </div>
+        <footer class="modal-foot">
+          <button class="btn ghost" @click="copyText(modal.path)">复制路径</button>
+          <span class="spacer"></span>
+          <button class="btn primary" @click="closeModal">知道了</button>
         </footer>
       </template>
 

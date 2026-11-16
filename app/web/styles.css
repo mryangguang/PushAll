@@ -352,6 +352,10 @@ tr.clickable { cursor: pointer; }
 .perms { display: flex; gap: 5px; flex-wrap: wrap; }
 .pc-actions { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .auto-refresh-hint { font-size: 12.5px; margin-left: 4px; }
+.path-box {
+  background: #f6f8fc; border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; font-size: 12.5px; word-break: break-all; user-select: all;
+}
 .time-window { margin-top: 4px; }
 .hour-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 6px; margin: 8px 0 6px; }
 .day-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: 6px 0; }

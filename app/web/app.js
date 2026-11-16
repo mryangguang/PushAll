@@ -892,15 +892,25 @@ const app = createApp({
     /* ---------- 设置 ---------- */
     async exportData() {
       try {
-        const data = await api("/api/export");
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `pushall-backup-${new Date().toISOString().slice(0, 10)}.json`;
-        a.click();
-        URL.revokeObjectURL(a.href);
+        const res = await api("/api/export/file", { method: "POST" });
+        this.modal = { type: "export", path: res.path, name: res.name };
       } catch (e) {
-        this.toastMsg("导出失败：" + e.message, "bad");
+        // 兜底：服务端写文件失败时，走浏览器下载
+        try {
+          const data = await api("/api/export");
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          const d = new Date();
+          const pad = (n) => String(n).padStart(2, "0");
+          a.href = url;
+          a.download = `pushall-backup-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 3000);
+          this.toastMsg("已开始下载到浏览器默认下载目录");
+        } catch (e2) {
+          this.toastMsg("导出失败：" + e2.message, "bad");
+        }
       }
     },
 
