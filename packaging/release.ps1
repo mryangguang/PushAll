@@ -43,6 +43,15 @@ if ($DryRun) {
     exit 0
 }
 
+# ---- 同步 README（版本号 + 最近更新）----
+$readmeScript = Join-Path $root "packaging\update_readme.ps1"
+$readmeResult = & $readmeScript -Version $version -NotesFile $NotesFile
+if ($readmeResult -eq "changed") {
+    git add README.md
+    git commit -m "Update README for v$version" | Out-Null
+    Write-Output "README.md updated and committed (v$version)"
+}
+
 $env:GIT_TERMINAL_PROMPT = "0"
 if (-not $SkipPush) {
     git tag -f $tag
