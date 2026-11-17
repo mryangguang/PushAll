@@ -5,7 +5,7 @@
 
 本地单机 · 插件化 · 系统托盘常驻 · GitHub Releases 自动更新
 
-**当前版本：v0.2.2** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
+**当前版本：v0.2.3** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
 
 ---
 
@@ -65,6 +65,11 @@
 ---
 
 ## 最近更新
+
+### v0.2.3
+- 修复「测试连接」提示 `'messages' must contain the word 'json'` 的 400 错误：测试请求现在明确包含 json 并要求返回 json
+- 网关不支持 `response_format`（json_object）时自动降级重试一次，不再直接失败
+- AI 报错提示改为显示网关返回的具体 message，便于定位问题
 
 ### v0.2.2
 - 升级时只显示一个「PushAll 更新」进度窗口：等待旧版本退出 → 复制文件 → 重启，全程无命令行黑窗
