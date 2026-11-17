@@ -1111,7 +1111,12 @@ async def webhook_trigger(scenario_id: int, request: Request):
 @app.get("/api/runs")
 def list_runs(scenario_id: int | None = None, limit: int = 50, offset: int = 0):
     limit = max(1, min(limit, 200))
-    return db.list_runs(scenario_id, limit, offset)
+    rows = db.list_runs(scenario_id, limit, offset)
+    # 列表不返回完整消息正文，减小接口体积与前端内存占用（详情接口才返回 content）
+    for row in rows:
+        content = row.pop("content", "") or ""
+        row["content_length"] = len(content)
+    return rows
 
 
 @app.get("/api/runs/{run_id}")

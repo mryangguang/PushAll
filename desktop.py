@@ -559,12 +559,13 @@ def _run(start_hidden: bool = False) -> int:
 
     threading.Thread(target=_cleanup_temps, name="pushall-cleanup", daemon=True).start()
 
-    try:
-        import webview
-    except ImportError:
-        alert("未安装 pywebview，请执行：pip install -r requirements-desktop.txt")
-        server.stop()
-        return 1
+    if not start_hidden:
+        try:
+            import webview
+        except ImportError:
+            alert("未安装 pywebview，请执行：pip install -r requirements-desktop.txt")
+            server.stop()
+            return 1
 
     from app.main import app as fastapi_app
 
@@ -602,36 +603,43 @@ def _run(start_hidden: bool = False) -> int:
 
     gui_ok = False
     try:
-        window = webview.create_window(
-            "PushAll 消息中心",
-            URL,
-            width=1280,
-            height=840,
-            min_size=(1000, 660),
-            background_color="#f4f6fa",
-            text_select=True,
-            hidden=start_hidden,
-        )
-        desktop.attach(window)
-        window.events.closing += desktop.on_closing
-        window.events.minimized += desktop.on_minimized
-        log("主窗口已创建" + ("（开机自启动，仅托盘运行）" if start_hidden else ""))
-        webview.start(icon=str(ICON_ICO))
-        gui_ok = True
+        if start_hidden:
+            # 开机自启动：只跑服务和托盘，不启动内嵌浏览器（省大量内存）
+            log("开机自启动模式：仅托盘运行；打开主界面时使用系统浏览器")
+            desktop.stop_event.wait()
+        else:
+            # WebView2 降低内存：关闭 GPU 进程 + 限制 JS 堆（可用环境变量覆盖）
+            os.environ.setdefault(
+                "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+                "--disable-gpu --js-flags=--max-old-space-size=128",
+            )
+            window = webview.create_window(
+                "PushAll 消息中心",
+                URL,
+                width=1280,
+                height=840,
+                min_size=(1000, 660),
+                background_color="#f4f6fa",
+                text_select=True,
+            )
+            desktop.attach(window)
+            window.events.closing += desktop.on_closing
+            window.events.minimized += desktop.on_minimized
+            log("主窗口已创建")
+            webview.start(icon=str(ICON_ICO))
+            gui_ok = True
     except Exception as exc:  # noqa: BLE001
-        log(f"窗口启动失败，改用浏览器：{type(exc).__name__}: {exc}")
+        if not start_hidden:
+            log(f"窗口启动失败，改用浏览器：{type(exc).__name__}: {exc}")
 
     try:
-        if not gui_ok:
-            if start_hidden:
-                # 开机自启动场景不弹窗、不打开浏览器，保持托盘常驻
-                log("窗口创建失败（开机自启动模式），仅托盘运行")
-                desktop.stop_event.wait()
-            else:
-                # 缺少 WebView2 等情况下退化为浏览器，托盘与服务继续常驻
-                alert("无法创建桌面窗口（可能缺少 WebView2 运行时），已改用系统浏览器打开。")
-                webbrowser.open(URL)
-                desktop.stop_event.wait()
+        if not start_hidden and not gui_ok:
+            # 缺少 WebView2 等情况下退化为浏览器，托盘与服务继续常驻
+            alert("无法创建桌面窗口（可能缺少 WebView2 运行时），已改用系统浏览器打开。")
+            webbrowser.open(URL)
+            desktop.stop_event.wait()
+    except Exception:  # noqa: BLE001
+        pass
     finally:
         desktop.quitting = True
         try:
@@ -642,7 +650,6 @@ def _run(start_hidden: bool = False) -> int:
         server.stop()
         log("桌面端已退出")
     return 0
-
 
 def main() -> int:
     if "--apply-update" in sys.argv:
