@@ -510,29 +510,28 @@ def _apply_update(args, log, progress) -> int:
         )
         log("restarted")
 
-    # 清理临时目录（可选，失败不影响）
-    try:
-        cleanup = Path(tempfile.gettempdir()) / f"pushall-clean-{int(time.time())}.cmd"
-        cleanup.write_text(
-            "@echo off\r\n"
-            "timeout /t 3 /nobreak >nul\r\n"
-            f'rmdir /S /Q "{source}"\r\n'
-            '(goto) 2>nul & del "%~f0"\r\n',
-            encoding="utf-8",
-        )
-        subprocess.Popen(
-            ["cmd.exe", "/c", str(cleanup)],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=True,
-            **proc.detached_kwargs(),
-        )
-    except Exception:  # noqa: BLE001
-        pass
-
     finish(True, "更新完成，正在重启…")
     return 0
+
+
+def cleanup_stale_temps(min_age_seconds: int = 30) -> int:
+    """清理旧的更新临时目录（由新启动的实例调用，无任何命令窗口）。"""
+    removed = 0
+    base = Path(tempfile.gettempdir())
+    now = time.time()
+    for pattern in ("pushall-update-*", "pushall-clean-*.cmd"):
+        for path in base.glob(pattern):
+            try:
+                if now - path.stat().st_mtime < min_age_seconds:
+                    continue
+                if path.is_dir():
+                    shutil.rmtree(path, ignore_errors=True)
+                else:
+                    path.unlink(missing_ok=True)
+                removed += 1
+            except OSError:
+                continue
+    return removed
 
 
 # ---------------- 跳过记录 ----------------# ---------------- 跳过记录 ----------------

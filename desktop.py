@@ -545,6 +545,20 @@ def _run(start_hidden: bool = False) -> int:
         alert("服务启动失败，请检查依赖是否安装完整，或在命令行运行 desktop.py 查看错误。")
         return 1
 
+    # 静默清理上次更新留下的临时目录（不弹任何命令窗口）
+    def _cleanup_temps() -> None:
+        time.sleep(5)
+        try:
+            from app import updater as update_mod
+
+            removed = update_mod.cleanup_stale_temps()
+            if removed:
+                log(f"已清理更新临时目录：{removed} 个")
+        except Exception as exc:  # noqa: BLE001
+            log(f"清理更新临时目录失败：{exc}")
+
+    threading.Thread(target=_cleanup_temps, name="pushall-cleanup", daemon=True).start()
+
     try:
         import webview
     except ImportError:
