@@ -531,6 +531,51 @@
       </div>
 
       <div class="panel">
+        <h3>AI 模型</h3>
+        <p class="help">用于数据源的 AI 处理（过滤 / 打标 / 排序 / 汇总）。未指定模型的数据源使用默认模型；主模型失败时会自动重试全局备用模型。</p>
+        <div class="grid-2">
+          <div class="field">
+            <label>默认模型</label>
+            <select v-model.number="aiSettings.default_model_id" @change="saveAiSettings">
+              <option :value="null">未设置</option>
+              <option v-for="m in aiModels" :key="m.id" :value="m.id">{{ m.name }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>全局备用模型</label>
+            <select v-model.number="aiSettings.fallback_model_id" @change="saveAiSettings">
+              <option :value="null">未设置</option>
+              <option v-for="m in aiModels" :key="m.id" :value="m.id">{{ m.name }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="inline-actions">
+          <button class="btn primary" @click="openAiModel(null)">+ 添加模型</button>
+        </div>
+        <div class="table-wrap" v-if="aiModels.length">
+          <table class="list-table">
+            <thead>
+              <tr><th>名称</th><th>模型</th><th>地址</th><th style="width:70px">状态</th><th style="width:150px">操作</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="m in aiModels" :key="m.id">
+                <td class="strong">{{ m.name }} <span class="tag blue" v-if="aiSettings.default_model_id === m.id">默认</span></td>
+                <td class="mono">{{ m.model }}</td>
+                <td class="muted ellipsis">{{ m.base_url }}</td>
+                <td><span class="tag" :class="m.enabled ? 'success' : 'muted'">{{ m.enabled ? '可用' : '停用' }}</span></td>
+                <td>
+                  <button class="link" @click="testAiModel(m)">测试</button>
+                  <button class="link" @click="openAiModel(m)">编辑</button>
+                  <button class="link danger" @click="deleteAiModel(m)">删除</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="help" v-else>还没有模型，点击「添加模型」配置内网网关。</p>
+      </div>
+
+      <div class="panel">
         <h3>备份与恢复</h3>
         <div class="inline-actions">
           <button class="btn ghost" @click="exportData">导出配置 JSON</button>
@@ -576,6 +621,84 @@
           </div>
           <schema-form v-if="modalPlugin" :schema="modalPlugin.schema" v-model="modal.item.config"></schema-form>
           <p class="help" v-if="modalPlugin && modalPlugin.has_settings">已自动带出「插件」页的统一设置（可修改）；这里的修改只影响当前数据源 / 渠道，不会改回插件默认值。</p>
+
+          <div class="ai-block" v-if="modal.type === 'source'">
+            <label class="switch-line compact">
+              <span class="switch"><input type="checkbox" v-model="modal.item.ai.enabled"><i></i></span>
+              <span>AI 处理（取数后、模板前，可选）</span>
+            </label>
+            <div v-if="modal.item.ai.enabled" class="ai-body">
+              <div class="grid-2">
+                <div class="field">
+                  <label>主模型</label>
+                  <select v-model.number="modal.item.ai.model_id">
+                    <option :value="null">跟随默认模型</option>
+                    <option v-for="m in aiModels" :key="m.id" :value="m.id">{{ m.name }}</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>AI 报错模板</label>
+                  <select v-model.number="modal.item.ai.error_template_id">
+                    <option :value="null">内置默认</option>
+                    <option v-for="t in templates" :key="t.id" :value="t.id">{{ t.name }}</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label>处理要求</label>
+                <textarea class="code" rows="4" v-model="modal.item.ai.instruction"
+                          placeholder="例如：去掉停留不到 24 小时的；按停留小时倒序；超过 48 小时的加 AI_优先级=高；写一句汇总"></textarea>
+                <div class="help">模型只能过滤、新增 AI_ 前缀字段、排序、取前 N、写汇总，不能新增行。</div>
+              </div>
+              <div class="grid-2">
+                <div class="field">
+                  <label>发送字段（逗号分隔）</label>
+                  <input v-model="modal.item.ai.columns" placeholder="留空=全部字段">
+                </div>
+                <div class="field">
+                  <label>失败策略</label>
+                  <select v-model="modal.item.ai.failure_policy">
+                    <option value="notify_error">推送 AI 报错提示</option>
+                    <option value="keep_all">照常推送全部数据</option>
+                  </select>
+                </div>
+              </div>
+              <label class="switch-line compact">
+                <span class="switch"><input type="checkbox" v-model="modal.item.ai.save_raw"><i></i></span>
+                <span>保存模型原始响应（调试用）</span>
+              </label>
+              <div class="inline-actions">
+                <button class="btn ghost" @click="testSourceAi" :disabled="modal.aiTesting">
+                  {{ modal.aiTesting ? '测试中…' : '测试AI（不推送）' }}
+                </button>
+                <span class="muted">取前 20 行测试，结果只在弹窗显示</span>
+              </div>
+              <div class="test-box" v-if="modal.aiPreview">
+                <div class="test-line" :class="modal.aiPreview.ok ? 'ok' : 'bad'">
+                  <b>{{ modal.aiPreview.ok ? 'AI 测试成功' : 'AI 测试失败' }}</b>
+                  <span>{{ modal.aiPreview.message }}</span>
+                </div>
+                <template v-if="modal.aiPreview.ok && modal.aiPreview.detail">
+                  <p class="help">
+                    保留 {{ modal.aiPreview.detail.kept }} / {{ modal.aiPreview.detail.input_rows }} 条；
+                    模型：{{ (modal.aiPreview.detail.model || {}).name }}
+                    <span v-if="modal.aiPreview.detail.fallback_used">（备用模型）</span>
+                  </p>
+                  <p class="help" v-if="modal.aiPreview.detail.summary">汇总：{{ modal.aiPreview.detail.summary }}</p>
+                  <div class="table-wrap small" v-if="modal.aiPreview.detail.dropped && modal.aiPreview.detail.dropped.length">
+                    <table>
+                      <thead><tr><th style="width:60px">行号</th><th>过滤原因</th></tr></thead>
+                      <tbody>
+                        <tr v-for="d in modal.aiPreview.detail.dropped" :key="d.index">
+                          <td>{{ d.index + 1 }}</td><td>{{ d.reason }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
           <div class="test-box" v-if="modal.test">
             <div class="test-line" :class="modal.test.ok ? 'ok' : 'bad'">
               <b>{{ modal.test.ok ? '测试成功' : '测试失败' }}</b>
@@ -637,6 +760,105 @@
           <button class="btn ghost" @click="clearPluginSettings">清空设置</button>
           <button class="btn ghost" @click="closeModal">取消</button>
           <button class="btn primary" @click="savePluginSettings">保存</button>
+        </footer>
+      </template>
+
+      <!-- AI 模型 -->
+      <template v-if="modal.type === 'ai_model'">
+        <header class="modal-head">
+          <h2>{{ modal.item.id ? '编辑 AI 模型' : '添加 AI 模型' }}</h2>
+          <button class="btn ghost icon" @click="closeModal">✕</button>
+        </header>
+        <div class="modal-body">
+          <div class="grid-2">
+            <div class="field">
+              <label>名称</label>
+              <input v-model="modal.item.name" placeholder="内网-DeepSeek">
+            </div>
+            <div class="field">
+              <label>供应商预设</label>
+              <select v-model="modal.item.preset" @change="applyAiPreset">
+                <option value="internal">内网网关</option>
+                <option value="openai">OpenAI 兼容</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="qwen">通义千问</option>
+                <option value="ollama">本地 Ollama</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Base URL</label>
+            <input v-model="modal.item.base_url" class="mono" placeholder="http://ai-gw.xxx.local/v1">
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>模型名</label>
+              <input v-model="modal.item.model" class="mono" placeholder="deepseek-chat">
+            </div>
+            <div class="field">
+              <label>API Key</label>
+              <input type="password" v-model="modal.item.api_key"
+                     :placeholder="modal.item.has_key ? '已保存，留空表示不修改' : '网关密钥（可留空）'">
+            </div>
+          </div>
+          <details class="adv">
+            <summary>高级选项</summary>
+            <div class="grid-2">
+              <div class="field">
+                <label>认证方式</label>
+                <select v-model="modal.item.auth_type">
+                  <option value="bearer">Authorization: Bearer</option>
+                  <option value="header">自定义请求头</option>
+                </select>
+              </div>
+              <div class="field" v-if="modal.item.auth_type === 'header'">
+                <label>请求头名称</label>
+                <input v-model="modal.item.auth_header" placeholder="api-key">
+              </div>
+              <div class="field">
+                <label>温度</label>
+                <input type="number" step="0.1" min="0" max="2" v-model.number="modal.item.temperature">
+              </div>
+              <div class="field">
+                <label>最大 tokens</label>
+                <input type="number" min="100" v-model.number="modal.item.max_tokens">
+              </div>
+              <div class="field">
+                <label>超时（秒）</label>
+                <input type="number" min="5" v-model.number="modal.item.timeout">
+              </div>
+              <div class="field">
+                <label>额外请求头（JSON）</label>
+                <input v-model="modal.item.extra_headers" class="mono" placeholder='{"X-Tenant":"belle"}'>
+              </div>
+            </div>
+            <label class="switch-line compact">
+              <span class="switch"><input type="checkbox" v-model="modal.item.json_mode"><i></i></span>
+              <span>要求 JSON 输出（网关支持 response_format 时开）</span>
+            </label>
+            <label class="switch-line compact">
+              <span class="switch"><input type="checkbox" v-model="modal.item.verify_tls"><i></i></span>
+              <span>校验 HTTPS 证书</span>
+            </label>
+            <label class="switch-line compact">
+              <span class="switch"><input type="checkbox" v-model="modal.item.enabled"><i></i></span>
+              <span>启用该模型</span>
+            </label>
+          </details>
+          <div class="test-box" v-if="modal.test">
+            <div class="test-line" :class="modal.test.ok ? 'ok' : 'bad'">
+              <b>{{ modal.test.ok ? '连接成功' : '连接失败' }}</b>
+              <span>{{ modal.test.message }}</span>
+            </div>
+          </div>
+        </div>
+        <footer class="modal-foot">
+          <button class="btn ghost" @click="testAiModelForm" :disabled="modal.testing">
+            {{ modal.testing ? '测试中…' : '测试连接' }}
+          </button>
+          <span class="spacer"></span>
+          <button class="btn ghost" @click="closeModal">取消</button>
+          <button class="btn primary" @click="saveAiModel">保存</button>
         </footer>
       </template>
 

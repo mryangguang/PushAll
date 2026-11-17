@@ -66,6 +66,7 @@ class SourceIn(BaseModel):
     name: str = Field(min_length=1)
     plugin_id: str
     config: dict = Field(default_factory=dict)
+    ai: dict = Field(default_factory=dict)
 
 
 class ChannelIn(BaseModel):
@@ -109,6 +110,40 @@ class AutostartIn(BaseModel):
     enabled: bool
 
 
+class AiProviderIn(BaseModel):
+    name: str = Field(min_length=1)
+    preset: str = "internal"
+    base_url: str = ""
+    api_key: str = ""
+    model: str = ""
+    auth_type: str = "bearer"
+    auth_header: str = "Authorization"
+    auth_prefix: str = "Bearer "
+    extra_headers: str = ""
+    temperature: float = 0
+    max_tokens: int = 2000
+    timeout: int = 30
+    verify_tls: bool = True
+    json_mode: bool = True
+    enabled: bool = True
+
+
+class AiSettingsIn(BaseModel):
+    default_model_id: int | None = None
+    fallback_model_id: int | None = None
+
+
+class AiTestIn(BaseModel):
+    config: dict = Field(default_factory=dict)
+
+
+class AiPreviewIn(BaseModel):
+    plugin_id: str
+    config: dict = Field(default_factory=dict)
+    ai: dict = Field(default_factory=dict)
+    max_rows: int = 20
+
+
 class UpdateProxyIn(BaseModel):
     enabled: bool = False
     type: str = "http"
@@ -134,6 +169,7 @@ def _source_out(row: dict) -> dict:
         "name": row["name"],
         "plugin_id": row["plugin_id"],
         "config": crypto.loads(row.get("config_json")),
+        "ai": _loads(row.get("ai_json"), {}),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -200,6 +236,25 @@ def _validate_config(plugin_id: str, config: dict) -> None:
         loader.check_config(plugin_id, config)
     except PluginError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _validate_ai(ai: dict) -> None:
+    if not isinstance(ai, dict) or not ai.get("enabled"):
+        return
+    if not str(ai.get("instruction") or "").strip():
+        raise HTTPException(status_code=400, detail="启用 AI 处理后，处理要求不能为空")
+    model_id = ai.get("model_id")
+    if model_id:
+        row = db.fetch_one("ai_provider", int(model_id))
+        if not row:
+            raise HTTPException(status_code=400, detail="所选 AI 模型不存在，请先在设置中添加")
+        if not int(row.get("enabled") or 0):
+            raise HTTPException(status_code=400, detail="所选 AI 模型已停用")
+    elif not db.get_setting("ai_default_model_id", ""):
+        raise HTTPException(status_code=400, detail="未选择主模型，且未设置默认 AI 模型")
+    tpl = ai.get("error_template_id")
+    if tpl and not db.fetch_one("template", int(tpl)):
+        raise HTTPException(status_code=400, detail="AI 报错模板不存在")
 
 
 def _validate_cron(expr: str) -> None:
@@ -379,6 +434,199 @@ def set_autostart(body: AutostartIn):
     return {"supported": True, "enabled": autostart.is_enabled(), "command": cmd}
 
 
+# ---------------- AI 模型 ----------------
+
+def _ai_key_seal(key: str) -> str:
+    return crypto.dumps({"api_key": key}) if key else ""
+
+
+def _ai_key_open(raw: str | None) -> str:
+    if not raw:
+        return ""
+    data = crypto.loads(raw)
+    return str((data or {}).get("api_key") or "") if isinstance(data, dict) else ""
+
+
+def _ai_model_out(row: dict) -> dict:
+    item = dict(row)
+    item["has_key"] = bool(item.get("api_key"))
+    item["api_key"] = "********" if item.get("api_key") else ""
+    return item
+
+
+def _ai_model_export(row: dict) -> dict:
+    item = _ai_model_out(row)
+    item["api_key"] = ""
+    return item
+
+
+@app.get("/api/ai/models")
+def list_ai_models():
+    return [_ai_model_out(row) for row in db.fetch_all("ai_provider")]
+
+
+@app.post("/api/ai/models")
+def create_ai_model(body: AiProviderIn):
+    now = db.now_text()
+    row_id = db.insert(
+        "ai_provider",
+        {
+            "name": body.name.strip(),
+            "preset": body.preset,
+            "base_url": body.base_url.strip(),
+            "api_key": _ai_key_seal(body.api_key.strip()),
+            "model": body.model.strip(),
+            "auth_type": body.auth_type,
+            "auth_header": body.auth_header,
+            "auth_prefix": body.auth_prefix,
+            "extra_headers": body.extra_headers,
+            "temperature": float(body.temperature),
+            "max_tokens": int(body.max_tokens),
+            "timeout": int(body.timeout),
+            "verify_tls": 1 if body.verify_tls else 0,
+            "json_mode": 1 if body.json_mode else 0,
+            "enabled": 1 if body.enabled else 0,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    return _ai_model_out(_row_or_404("ai_provider", row_id))
+
+
+@app.put("/api/ai/models/{model_id}")
+def update_ai_model(model_id: int, body: AiProviderIn):
+    row = _row_or_404("ai_provider", model_id)
+    key = body.api_key.strip()
+    sealed = row.get("api_key") or ""
+    if key and "*" not in key:
+        sealed = _ai_key_seal(key)
+    db.update(
+        "ai_provider",
+        model_id,
+        {
+            "name": body.name.strip(),
+            "preset": body.preset,
+            "base_url": body.base_url.strip(),
+            "api_key": sealed,
+            "model": body.model.strip(),
+            "auth_type": body.auth_type,
+            "auth_header": body.auth_header,
+            "auth_prefix": body.auth_prefix,
+            "extra_headers": body.extra_headers,
+            "temperature": float(body.temperature),
+            "max_tokens": int(body.max_tokens),
+            "timeout": int(body.timeout),
+            "verify_tls": 1 if body.verify_tls else 0,
+            "json_mode": 1 if body.json_mode else 0,
+            "enabled": 1 if body.enabled else 0,
+            "updated_at": db.now_text(),
+        },
+    )
+    return _ai_model_out(_row_or_404("ai_provider", model_id))
+
+
+@app.delete("/api/ai/models/{model_id}")
+def delete_ai_model(model_id: int):
+    _row_or_404("ai_provider", model_id)
+    used = [
+        row["name"]
+        for row in db.fetch_all("source")
+        if int((_loads(row.get("ai_json"), {}) or {}).get("model_id") or 0) == int(model_id)
+    ]
+    if used:
+        raise HTTPException(status_code=400, detail=f"该模型被以下数据源使用：{'、'.join(used)}")
+    if db.get_setting("ai_default_model_id", "") == str(model_id):
+        db.set_setting("ai_default_model_id", "")
+    if db.get_setting("ai_fallback_model_id", "") == str(model_id):
+        db.set_setting("ai_fallback_model_id", "")
+    db.delete("ai_provider", model_id)
+    return {"ok": True}
+
+
+@app.post("/api/ai/test")
+def test_ai_model(body: AiTestIn):
+    from . import ai as ai_mod
+
+    cfg = dict(body.config or {})
+    key = str(cfg.get("api_key") or "")
+    if (not key or "*" in key) and cfg.get("id"):
+        row = db.fetch_one("ai_provider", int(cfg["id"] or 0))
+        if row:
+            cfg["api_key"] = _ai_key_open(row.get("api_key"))
+    cfg["max_tokens"] = min(int(cfg.get("max_tokens") or 200), 200)
+    result = ai_mod.call_model(cfg, [{"role": "user", "content": "只回复两个字：正常"}])
+    if not result.get("ok"):
+        return {"ok": False, "message": result.get("error") or "连接失败"}
+    return {
+        "ok": True,
+        "message": f"连接成功，模型返回：{str(result.get('content'))[:80]}",
+        "detail": {"duration_ms": result.get("duration_ms", 0)},
+    }
+
+
+@app.get("/api/ai/settings")
+def get_ai_settings():
+    def as_id(key: str):
+        raw = db.get_setting(key, "")
+        try:
+            return int(raw) if raw else None
+        except ValueError:
+            return None
+
+    return {
+        "default_model_id": as_id("ai_default_model_id"),
+        "fallback_model_id": as_id("ai_fallback_model_id"),
+    }
+
+
+@app.put("/api/ai/settings")
+def set_ai_settings(body: AiSettingsIn):
+    if body.default_model_id and not db.fetch_one("ai_provider", int(body.default_model_id)):
+        raise HTTPException(status_code=400, detail="默认模型不存在")
+    if body.fallback_model_id and not db.fetch_one("ai_provider", int(body.fallback_model_id)):
+        raise HTTPException(status_code=400, detail="备用模型不存在")
+    db.set_setting("ai_default_model_id", str(body.default_model_id or ""))
+    db.set_setting("ai_fallback_model_id", str(body.fallback_model_id or ""))
+    return get_ai_settings()
+
+
+@app.post("/api/ai/preview")
+def preview_ai(body: AiPreviewIn):
+    from . import ai as ai_mod
+    from .plugins.base import RunContext
+
+    plugin = _check_plugin(body.plugin_id, "source")
+    config = plugin_settings.merge(body.plugin_id, body.config or {})
+    limit = max(1, min(int(body.max_rows or 20), 100))
+    try:
+        rows = plugin.instance.fetch({**config, "max_rows": limit}, RunContext(trigger="preview"))
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "message": f"取数失败：{exc}"}
+    rows = list(rows or [])[:limit]
+    if not rows:
+        return {"ok": False, "message": "没有取到数据，无法测试 AI"}
+
+    result = ai_mod.process(body.ai or {}, rows, {"id": 0, "name": "（数据源测试）"}, {"id": 0, "name": body.plugin_id})
+    if not result.get("ok"):
+        return {"ok": False, "message": f"AI 处理失败：{result.get('error')}", "detail": result}
+    return {
+        "ok": True,
+        "message": f"AI 处理成功：保留 {result.get('kept')} / {result.get('input_rows')} 条",
+        "detail": {
+            "kept": result.get("kept"),
+            "input_rows": result.get("input_rows"),
+            "dropped": result.get("dropped"),
+            "summary": result.get("summary"),
+            "actions": result.get("actions"),
+            "attempts": result.get("attempts"),
+            "duration_ms": result.get("duration_ms"),
+            "model": result.get("model"),
+            "fallback_used": result.get("fallback_used"),
+        },
+        "rows": (result.get("rows") or [])[:20],
+    }
+
+
 # ---------------- 插件 ----------------
 
 @app.get("/api/plugins")
@@ -461,6 +709,7 @@ def list_sources():
 def create_source(body: SourceIn):
     _check_plugin(body.plugin_id, "source")
     _validate_config(body.plugin_id, plugin_settings.merge(body.plugin_id, body.config))
+    _validate_ai(body.ai)
     now = db.now_text()
     row_id = db.insert(
         "source",
@@ -468,6 +717,7 @@ def create_source(body: SourceIn):
             "name": body.name.strip(),
             "plugin_id": body.plugin_id,
             "config_json": crypto.dumps(body.config),
+            "ai_json": json.dumps(body.ai or {}, ensure_ascii=False),
             "created_at": now,
             "updated_at": now,
         },
@@ -480,6 +730,7 @@ def update_source(source_id: int, body: SourceIn):
     _row_or_404("source", source_id)
     _check_plugin(body.plugin_id, "source")
     _validate_config(body.plugin_id, plugin_settings.merge(body.plugin_id, body.config))
+    _validate_ai(body.ai)
     db.update(
         "source",
         source_id,
@@ -487,6 +738,7 @@ def update_source(source_id: int, body: SourceIn):
             "name": body.name.strip(),
             "plugin_id": body.plugin_id,
             "config_json": crypto.dumps(body.config),
+            "ai_json": json.dumps(body.ai or {}, ensure_ascii=False),
             "updated_at": db.now_text(),
         },
     )
@@ -503,6 +755,7 @@ def duplicate_source(source_id: int):
             "name": f"{row['name']} 副本",
             "plugin_id": row["plugin_id"],
             "config_json": row["config_json"],
+            "ai_json": row.get("ai_json") or "{}",
             "created_at": now,
             "updated_at": now,
         },
@@ -892,6 +1145,8 @@ def export_data():
         "channels": [_channel_out(row) for row in db.fetch_all("channel")],
         "templates": [dict(row) for row in db.fetch_all("template")],
         "scenarios": [_scenario_export(row) for row in db.fetch_all("scenario")],
+        "ai_models": [_ai_model_export(row) for row in db.fetch_all("ai_provider")],
+        "ai_settings": get_ai_settings(),
     }
 
 
@@ -912,32 +1167,43 @@ def import_data(data: dict):
     source_map: dict[int, int] = {}
     template_map: dict[int, int] = {}
     channel_map: dict[int, int] = {}
+    ai_map: dict[int, int] = {}
     now = db.now_text()
     try:
-        for item in data.get("sources", []):
+        # 1) AI 模型（按名称复用，密钥不导入）
+        for item in data.get("ai_models", []):
+            name = str(item.get("name") or "").strip()
+            if not name:
+                continue
+            existing = next((r for r in db.fetch_all("ai_provider") if r.get("name") == name), None)
+            if existing:
+                ai_map[item.get("id")] = existing["id"]
+                continue
             new_id = db.insert(
-                "source",
+                "ai_provider",
                 {
-                    "name": item.get("name", "导入的数据源"),
-                    "plugin_id": item.get("plugin_id", ""),
-                    "config_json": crypto.dumps(item.get("config", {})),
+                    "name": name,
+                    "preset": item.get("preset", "internal"),
+                    "base_url": item.get("base_url", ""),
+                    "api_key": "",
+                    "model": item.get("model", ""),
+                    "auth_type": item.get("auth_type", "bearer"),
+                    "auth_header": item.get("auth_header", "Authorization"),
+                    "auth_prefix": item.get("auth_prefix", "Bearer "),
+                    "extra_headers": item.get("extra_headers", ""),
+                    "temperature": item.get("temperature", 0),
+                    "max_tokens": item.get("max_tokens", 2000),
+                    "timeout": item.get("timeout", 30),
+                    "verify_tls": 1 if item.get("verify_tls", True) else 0,
+                    "json_mode": 1 if item.get("json_mode", True) else 0,
+                    "enabled": 1 if item.get("enabled", True) else 0,
                     "created_at": now,
                     "updated_at": now,
                 },
             )
-            source_map[item.get("id")] = new_id
-        for item in data.get("channels", []):
-            new_id = db.insert(
-                "channel",
-                {
-                    "name": item.get("name", "导入的渠道"),
-                    "plugin_id": item.get("plugin_id", ""),
-                    "config_json": crypto.dumps(item.get("config", {})),
-                    "created_at": now,
-                    "updated_at": now,
-                },
-            )
-            channel_map[item.get("id")] = new_id
+            ai_map[item.get("id")] = new_id
+
+        # 2) 模板
         for item in data.get("templates", []):
             new_id = db.insert(
                 "template",
@@ -950,6 +1216,42 @@ def import_data(data: dict):
                 },
             )
             template_map[item.get("id")] = new_id
+
+        # 3) 数据源（含 AI 配置重映射）
+        for item in data.get("sources", []):
+            ai_cfg = dict(item.get("ai") or {})
+            if ai_cfg.get("model_id") in ai_map:
+                ai_cfg["model_id"] = ai_map[ai_cfg["model_id"]]
+            if ai_cfg.get("error_template_id") in template_map:
+                ai_cfg["error_template_id"] = template_map[ai_cfg["error_template_id"]]
+            new_id = db.insert(
+                "source",
+                {
+                    "name": item.get("name", "导入的数据源"),
+                    "plugin_id": item.get("plugin_id", ""),
+                    "config_json": crypto.dumps(item.get("config", {})),
+                    "ai_json": json.dumps(ai_cfg, ensure_ascii=False),
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
+            source_map[item.get("id")] = new_id
+
+        # 4) 渠道
+        for item in data.get("channels", []):
+            new_id = db.insert(
+                "channel",
+                {
+                    "name": item.get("name", "导入的渠道"),
+                    "plugin_id": item.get("plugin_id", ""),
+                    "config_json": crypto.dumps(item.get("config", {})),
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
+            channel_map[item.get("id")] = new_id
+
+        # 5) 场景
         for item in data.get("scenarios", []):
             db.insert(
                 "scenario",
@@ -967,13 +1269,18 @@ def import_data(data: dict):
                     "updated_at": now,
                 },
             )
+
+        # 6) AI 默认/备用模型
+        ai_settings = data.get("ai_settings") or {}
+        if ai_settings.get("default_model_id") in ai_map:
+            db.set_setting("ai_default_model_id", str(ai_map[ai_settings["default_model_id"]]))
+        if ai_settings.get("fallback_model_id") in ai_map:
+            db.set_setting("ai_fallback_model_id", str(ai_map[ai_settings["fallback_model_id"]]))
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"导入失败：{exc}") from exc
     scheduler.sync()
     return {"ok": True, "scenarios": len(data.get("scenarios", []))}
 
-
-# ---------------- 联调辅助 ----------------
 
 @app.post("/api/dev/echo")
 async def dev_echo(request: Request):

@@ -126,6 +126,8 @@ const app = createApp({
       updateProxy: { enabled: false, type: "http", host: "127.0.0.1", port: 1080, username: "", password: "", has_password: false },
       autostart: { supported: false, enabled: false, command: "" },
       autostartBusy: false,
+      aiModels: [],
+      aiSettings: { default_model_id: null, fallback_model_id: null },
       proxyTesting: false,
       proxyTest: null,
       maskMouseDown: false,
@@ -275,6 +277,7 @@ const app = createApp({
       if (view === "settings") {
         this.loadUpdateProxy();
         this.loadAutostart();
+        this.loadAi();
       }
       if (view === "plugins" && !this.plugins.length) this.refreshAll();
     },
@@ -591,7 +594,14 @@ const app = createApp({
       const type = kind === "source" ? "source" : "sink";
       const list = this.pluginsByType(type);
       const base = item ? clone(item) : { id: null, name: "", plugin_id: (list[0] || {}).id || "", config: {} };
-      this.modal = { type: kind, item: base, test: null, testing: false };
+      if (kind === "source") {
+        base.ai = {
+          enabled: false, model_id: null, instruction: "", columns: "",
+          failure_policy: "notify_error", error_template_id: null, save_raw: false, retry: 1,
+          ...(base.ai || {})
+        };
+      }
+      this.modal = { type: kind, item: base, test: null, testing: false, aiPreview: null, aiTesting: false };
       const plugin = this.plugins.find((p) => p.id === base.plugin_id);
       if (!plugin) return;
       const saved = item ? item.config || {} : {};
@@ -673,6 +683,7 @@ const app = createApp({
       if (!m.item.plugin_id) return this.toastMsg("请选择插件", "bad");
       const isSource = m.type === "source";
       const body = { name: m.item.name.trim(), plugin_id: m.item.plugin_id, config: m.item.config || {} };
+      if (isSource) body.ai = m.item.ai || {};
       try {
         if (m.item.id) {
           await api((isSource ? "/api/sources/" : "/api/channels/") + m.item.id, { method: "PUT", body: JSON.stringify(body) });
@@ -921,6 +932,134 @@ const app = createApp({
 
     pickImport() { this.$refs.importInput.click(); },
 
+    async loadAi() {
+      try {
+        const [models, settings] = await Promise.all([
+          api("/api/ai/models"),
+          api("/api/ai/settings")
+        ]);
+        this.aiModels = models;
+        this.aiSettings = settings;
+      } catch (e) {
+        // 旧版后端无 AI 接口时静默忽略
+      }
+    },
+
+    async saveAiSettings() {
+      try {
+        this.aiSettings = await api("/api/ai/settings", {
+          method: "PUT",
+          body: JSON.stringify({
+            default_model_id: this.aiSettings.default_model_id || null,
+            fallback_model_id: this.aiSettings.fallback_model_id || null
+          })
+        });
+        this.toastMsg("AI 模型设置已保存");
+      } catch (e) {
+        this.toastMsg("保存失败：" + e.message, "bad");
+      }
+    },
+
+    openAiModel(item = null) {
+      const base = item
+        ? { ...item, api_key: "" }
+        : {
+            id: null, name: "", preset: "internal", base_url: "", api_key: "", model: "",
+            auth_type: "bearer", auth_header: "Authorization", auth_prefix: "Bearer ",
+            extra_headers: "", temperature: 0, max_tokens: 2000, timeout: 30,
+            verify_tls: true, json_mode: true, enabled: true
+          };
+      this.modal = { type: "ai_model", item: base, test: null, testing: false };
+    },
+
+    applyAiPreset() {
+      const presets = {
+        openai: "https://api.openai.com/v1",
+        deepseek: "https://api.deepseek.com/v1",
+        qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        ollama: "http://127.0.0.1:11434/v1"
+      };
+      const url = presets[this.modal.item.preset];
+      if (url && !this.modal.item.base_url) this.modal.item.base_url = url;
+    },
+
+    async saveAiModel() {
+      const m = this.modal;
+      if (!m || !m.item) return;
+      if (!(m.item.name || "").trim()) return this.toastMsg("请填写模型名称", "bad");
+      if (!(m.item.base_url || "").trim()) return this.toastMsg("请填写 Base URL", "bad");
+      if (!(m.item.model || "").trim()) return this.toastMsg("请填写模型名", "bad");
+      try {
+        if (m.item.id) {
+          await api(`/api/ai/models/${m.item.id}`, { method: "PUT", body: JSON.stringify(m.item) });
+        } else {
+          await api("/api/ai/models", { method: "POST", body: JSON.stringify(m.item) });
+        }
+        this.modal = null;
+        await this.loadAi();
+        this.toastMsg("AI 模型已保存");
+      } catch (e) {
+        this.toastMsg("保存失败：" + e.message, "bad");
+      }
+    },
+
+    deleteAiModel(item) {
+      this.ask("删除 AI 模型", `确定删除「${item.name}」？被数据源使用的模型不能删除。`, async () => {
+        try {
+          await api(`/api/ai/models/${item.id}`, { method: "DELETE" });
+          await this.loadAi();
+          this.toastMsg("已删除");
+        } catch (e) {
+          this.toastMsg("删除失败：" + e.message, "bad");
+        }
+      });
+    },
+
+    async testAiModel(item) {
+      try {
+        const res = await api("/api/ai/test", { method: "POST", body: JSON.stringify({ config: item }) });
+        this.toastMsg(res.ok ? res.message : "测试失败：" + res.message, res.ok ? "ok" : "bad");
+      } catch (e) {
+        this.toastMsg("测试失败：" + e.message, "bad");
+      }
+    },
+
+    async testAiModelForm() {
+      const m = this.modal;
+      if (!m || !m.item) return;
+      m.testing = true;
+      m.test = null;
+      try {
+        m.test = await api("/api/ai/test", { method: "POST", body: JSON.stringify({ config: m.item }) });
+      } catch (e) {
+        m.test = { ok: false, message: e.message };
+      } finally {
+        m.testing = false;
+      }
+    },
+
+    async testSourceAi() {
+      const m = this.modal;
+      if (!m || !m.item) return;
+      m.aiTesting = true;
+      m.aiPreview = null;
+      try {
+        m.aiPreview = await api("/api/ai/preview", {
+          method: "POST",
+          body: JSON.stringify({
+            plugin_id: m.item.plugin_id,
+            config: m.item.config || {},
+            ai: m.item.ai || {},
+            max_rows: 20
+          })
+        });
+      } catch (e) {
+        m.aiPreview = { ok: false, message: e.message };
+      } finally {
+        m.aiTesting = false;
+      }
+    },
+
     async loadAutostart() {
       try {
         this.autostart = await api("/api/settings/autostart");
@@ -1045,6 +1184,7 @@ const app = createApp({
     this.refreshAll();
     this.loadUpdateProxy();
     this.loadAutostart();
+    this.loadAi();
   }
 });
 

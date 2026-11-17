@@ -92,6 +92,27 @@ CREATE TABLE IF NOT EXISTS plugin_state (
     installed_at TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS ai_provider (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    name          TEXT NOT NULL DEFAULT '',
+    preset        TEXT NOT NULL DEFAULT 'internal',
+    base_url      TEXT NOT NULL DEFAULT '',
+    api_key       TEXT NOT NULL DEFAULT '',
+    model         TEXT NOT NULL DEFAULT '',
+    auth_type     TEXT NOT NULL DEFAULT 'bearer',
+    auth_header   TEXT NOT NULL DEFAULT 'Authorization',
+    auth_prefix   TEXT NOT NULL DEFAULT 'Bearer ',
+    extra_headers TEXT NOT NULL DEFAULT '',
+    temperature   REAL NOT NULL DEFAULT 0,
+    max_tokens    INTEGER NOT NULL DEFAULT 2000,
+    timeout       INTEGER NOT NULL DEFAULT 30,
+    verify_tls    INTEGER NOT NULL DEFAULT 1,
+    json_mode     INTEGER NOT NULL DEFAULT 1,
+    enabled       INTEGER NOT NULL DEFAULT 1,
+    created_at    TEXT NOT NULL DEFAULT '',
+    updated_at    TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS plugin_setting (
     plugin_id   TEXT PRIMARY KEY,
     config_json TEXT NOT NULL DEFAULT '{}',
@@ -103,7 +124,7 @@ CREATE INDEX IF NOT EXISTS idx_run_created ON run(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_step_run ON run_step(run_id, seq);
 """
 
-TABLES = {"source", "channel", "template", "scenario"}
+TABLES = {"source", "channel", "template", "scenario", "ai_provider"}
 
 
 def now_text() -> str:
@@ -129,6 +150,10 @@ def connect():
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
+        # 旧库迁移：数据源增加 ai_json 列
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(source)")}
+        if "ai_json" not in cols:
+            conn.execute("ALTER TABLE source ADD COLUMN ai_json TEXT NOT NULL DEFAULT '{}'")
 
 
 def _check(table: str) -> None:

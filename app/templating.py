@@ -112,6 +112,7 @@ def build_context(rows: list[dict], scenario: dict, trigger: str, payload: dict 
             "date": started.strftime("%Y-%m-%d"),
         },
         "payload": payload or {},
+        "ai": {"summary": "", "kept": len(rows), "dropped": 0, "model": "", "fallback_used": False},
         "now": now,
     }
 

@@ -352,6 +352,15 @@ tr.clickable { cursor: pointer; }
 .perms { display: flex; gap: 5px; flex-wrap: wrap; }
 .pc-actions { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .auto-refresh-hint { font-size: 12.5px; margin-left: 4px; }
+.ai-block {
+  margin-top: 14px; padding: 12px; border: 1px solid var(--line);
+  border-radius: 8px; background: #fafbfe;
+}
+.ai-body { margin-top: 10px; }
+.ai-block .field { margin-bottom: 10px; }
+.adv { margin: 10px 0; }
+.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+
 .path-box {
   background: #f6f8fc; border: 1px solid var(--line); border-radius: 8px;
   padding: 10px 12px; font-size: 12.5px; word-break: break-all; user-select: all;

@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from . import crypto, db, plugin_settings, settings, templating
+from . import ai, crypto, db, plugin_settings, settings, templating
 from .plugins import loader
 from .plugins.base import RunContext, SendResult
 
@@ -69,9 +69,11 @@ def _json(raw: str | None, default: Any) -> Any:
         return default
 
 
-def _build_message(scenario: dict, rows: list[dict], trigger: str, payload: dict | None):
+def _build_message(scenario: dict, rows: list[dict], trigger: str, payload: dict | None, ai_meta: dict | None = None):
     template_row = db.fetch_one("template", scenario.get("template_id") or 0)
     context = templating.build_context(rows, scenario, trigger, payload)
+    if ai_meta:
+        context["ai"] = {**context.get("ai", {}), **ai_meta}
 
     title_tpl = (template_row or {}).get("title_tpl") or templating.DEFAULT_TITLE
     body_tpl = (template_row or {}).get("body_tpl") or templating.DEFAULT_BODY
@@ -79,6 +81,93 @@ def _build_message(scenario: dict, rows: list[dict], trigger: str, payload: dict
     title = templating.render(title_tpl, context).strip() or scenario.get("name", "PushAll 通知")
     content = templating.render(body_tpl, context).strip()
     return title, content, context, template_row
+
+
+def _build_ai_error_message(scenario: dict, source: dict, ai_cfg: dict, result: dict, trigger: str):
+    tpl_row = db.fetch_one("template", int(ai_cfg.get("error_template_id") or 0)) if ai_cfg.get("error_template_id") else None
+    title_tpl = (tpl_row or {}).get("title_tpl") or ai.DEFAULT_ERROR_TITLE
+    body_tpl = (tpl_row or {}).get("body_tpl") or ai.DEFAULT_ERROR_BODY
+    ctx = templating.build_context([], scenario, trigger, None)
+    plugin = loader.get_plugin(source.get("plugin_id") or "")
+    channels = _load_channels(scenario)
+    ctx.update(
+        {
+            "source": {
+                "id": source.get("id"),
+                "name": source.get("name", ""),
+                "plugin_id": source.get("plugin_id", ""),
+                "plugin_name": plugin.name if plugin else source.get("plugin_id", ""),
+            },
+            "channels": [{"name": c["name"], "plugin_id": c["plugin_id"]} for c, _p, _c in channels],
+            "template": {"id": scenario.get("template_id"), "name": ((db.fetch_one("template", scenario.get("template_id") or 0) or {}).get("name") or "")},
+            "ai": {
+                "model": result.get("model") or {},
+                "fallback_model": result.get("fallback_model"),
+                "error": result.get("error", ""),
+                "error_code": result.get("error_code", ""),
+                "attempts": result.get("attempts") or [],
+                "row_count": result.get("row_count", 0),
+                "duration_ms": result.get("duration_ms", 0),
+                "instruction": result.get("instruction", ""),
+                "time": db.now_text(),
+            },
+        }
+    )
+    title = templating.render(title_tpl, ctx).strip() or f"【AI处理失败】{scenario.get('name', '')}"
+    content = templating.render(body_tpl, ctx).strip()
+    return title, content
+
+
+def _deliver(channels: list, message_obj: dict, retry_times: int, steps: list) -> tuple[int, list[str]]:
+    ctx = RunContext(scenario=message_obj.get("scenario") or {}, trigger=str(message_obj.get("trigger") or "manual"))
+    ok_count = 0
+    failures: list[str] = []
+    for channel, plugin, config in channels:
+        seq = len(steps) + 1
+        step_name = f"推送 · {channel['name']}"
+        if not plugin or not plugin.ok:
+            steps.append(
+                {
+                    "seq": seq,
+                    "step": "send",
+                    "name": step_name,
+                    "status": "failed",
+                    "duration_ms": 0,
+                    "detail": {"error": f"插件不可用：{getattr(plugin, 'error', '未找到')}"},
+                }
+            )
+            failures.append(f"{channel['name']}：插件不可用")
+            continue
+
+        t0 = time.perf_counter()
+        result: SendResult
+        attempts = 0
+        while True:
+            attempts += 1
+            try:
+                result = plugin.instance.send(message_obj, config, ctx)
+            except Exception as exc:  # noqa: BLE001
+                result = SendResult(ok=False, message=f"插件异常：{exc}", retryable=True)
+            if result.ok or not result.retryable or attempts > retry_times:
+                break
+            time.sleep(0.8 * attempts)
+
+        duration_ms = int((time.perf_counter() - t0) * 1000)
+        steps.append(
+            {
+                "seq": seq,
+                "step": "send",
+                "name": step_name,
+                "status": "success" if result.ok else "failed",
+                "duration_ms": duration_ms,
+                "detail": {"message": result.message, "attempts": attempts, "response": result.detail or {}},
+            }
+        )
+        if result.ok:
+            ok_count += 1
+        else:
+            failures.append(f"{channel['name']}：{result.message}")
+    return ok_count, failures
 
 
 def _load_source(scenario: dict) -> tuple[dict, Any, dict]:
@@ -218,6 +307,84 @@ def _run_locked(scenario_id: int, trigger: str, payload: dict | None) -> dict:
         )
 
         options = _json(scenario.get("options_json"), {})
+        source_row = db.fetch_one("source", scenario.get("source_id") or 0) or {}
+        ai_cfg = _json(source_row.get("ai_json"), {})
+        ai_failed: dict | None = None
+        ai_result_ok: dict | None = None
+        if rows and isinstance(ai_cfg, dict) and ai_cfg.get("enabled"):
+            t0 = time.perf_counter()
+            ai_result = ai.process(ai_cfg, rows, scenario, source_row)
+            ai_dur = int((time.perf_counter() - t0) * 1000)
+            model_name = str(((ai_result.get("model") or {}).get("name")) or "AI")
+            if ai_result.get("ok"):
+                ai_result_ok = ai_result
+                rows = ai_result["rows"]
+                row_count = len(rows)
+                steps.append(
+                    {
+                        "seq": len(steps) + 1,
+                        "step": "ai",
+                        "name": f"AI 处理 · {model_name}",
+                        "status": "success",
+                        "duration_ms": ai_dur,
+                        "detail": {
+                            "model": model_name,
+                            "fallback_used": ai_result.get("fallback_used", False),
+                            "input_rows": ai_result.get("input_rows"),
+                            "kept": ai_result.get("kept"),
+                            "dropped": len(ai_result.get("dropped") or []),
+                            "dropped_reasons": (ai_result.get("dropped") or [])[:50],
+                            "actions": ai_result.get("actions"),
+                            "summary": ai_result.get("summary"),
+                            "attempts": ai_result.get("attempts"),
+                            "warnings": ai_result.get("warnings"),
+                        },
+                    }
+                )
+            else:
+                steps.append(
+                    {
+                        "seq": len(steps) + 1,
+                        "step": "ai",
+                        "name": f"AI 处理 · {model_name}",
+                        "status": "failed",
+                        "duration_ms": ai_dur,
+                        "detail": {
+                            "error": ai_result.get("error"),
+                            "error_code": ai_result.get("error_code"),
+                            "attempts": ai_result.get("attempts"),
+                        },
+                    }
+                )
+                policy = str(ai_cfg.get("failure_policy") or "notify_error")
+                if policy == "keep_all":
+                    ai_failed = ai_result
+                else:
+                    channels = _load_channels(scenario)
+                    err_title, err_content = _build_ai_error_message(scenario, source_row, ai_cfg, ai_result, trigger)
+                    if not channels:
+                        return _finish(
+                            scenario, trigger, "failed",
+                            f"AI处理失败：{ai_result.get('error')}；场景未配置推送渠道",
+                            row_count, err_title, err_content, steps, started_at, t_start,
+                        )
+                    message_obj = {
+                        "title": err_title,
+                        "content": err_content,
+                        "level": "warning",
+                        "data": [],
+                        "scenario": scenario,
+                        "trigger": trigger,
+                    }
+                    ok_count, failures = _deliver(channels, message_obj, int(options.get("retry", 1) or 0), steps)
+                    msg = f"AI处理失败：{ai_result.get('error')}；报错提示已发送到 {ok_count} 个渠道"
+                    if failures:
+                        msg += "（失败：" + "；".join(failures) + "）"
+                    return _finish(
+                        scenario, trigger, "failed", msg, row_count,
+                        err_title, err_content, steps, started_at, t_start,
+                    )
+
         send_when_empty = bool(options.get("send_when_empty", False))
         if row_count == 0 and not send_when_empty:
             status = "skipped"
@@ -225,10 +392,19 @@ def _run_locked(scenario_id: int, trigger: str, payload: dict | None) -> dict:
             return _finish(scenario, trigger, status, message, row_count, title, content, steps, started_at, t_start)
 
         t0 = time.perf_counter()
-        title, content, _, template_row = _build_message(scenario, rows, trigger, payload)
+        ai_meta = None
+        if ai_result_ok:
+            ai_meta = {
+                "summary": ai_result_ok.get("summary") or "",
+                "kept": ai_result_ok.get("kept"),
+                "dropped": len(ai_result_ok.get("dropped") or []),
+                "model": (ai_result_ok.get("model") or {}).get("name", ""),
+                "fallback_used": ai_result_ok.get("fallback_used", False),
+            }
+        title, content, _, template_row = _build_message(scenario, rows, trigger, payload, ai_meta)
         steps.append(
             {
-                "seq": 2,
+                "seq": len(steps) + 1,
                 "step": "render",
                 "name": "渲染模板",
                 "status": "success",
@@ -244,56 +420,8 @@ def _run_locked(scenario_id: int, trigger: str, payload: dict | None) -> dict:
             return _finish(scenario, trigger, status, message, row_count, title, content, steps, started_at, t_start)
 
         retry_times = int(options.get("retry", 1) or 0)
-        message_obj = {"title": title, "content": content, "level": "info", "data": rows, "scenario": scenario}
-        ctx = RunContext(scenario=scenario, trigger=trigger)
-
-        ok_count = 0
-        failures: list[str] = []
-        for channel, plugin, config in channels:
-            seq = len(steps) + 1
-            step_name = f"推送 · {channel['name']}"
-            if not plugin or not plugin.ok:
-                steps.append(
-                    {
-                        "seq": seq,
-                        "step": "send",
-                        "name": step_name,
-                        "status": "failed",
-                        "duration_ms": 0,
-                        "detail": {"error": f"插件不可用：{getattr(plugin, 'error', '未找到')}"},
-                    }
-                )
-                failures.append(f"{channel['name']}：插件不可用")
-                continue
-
-            t0 = time.perf_counter()
-            result: SendResult
-            attempts = 0
-            while True:
-                attempts += 1
-                try:
-                    result = plugin.instance.send(message_obj, config, ctx)
-                except Exception as exc:  # noqa: BLE001
-                    result = SendResult(ok=False, message=f"插件异常：{exc}", retryable=True)
-                if result.ok or not result.retryable or attempts > retry_times:
-                    break
-                time.sleep(0.8 * attempts)
-
-            duration_ms = int((time.perf_counter() - t0) * 1000)
-            steps.append(
-                {
-                    "seq": seq,
-                    "step": "send",
-                    "name": step_name,
-                    "status": "success" if result.ok else "failed",
-                    "duration_ms": duration_ms,
-                    "detail": {"message": result.message, "attempts": attempts, "response": result.detail or {}},
-                }
-            )
-            if result.ok:
-                ok_count += 1
-            else:
-                failures.append(f"{channel['name']}：{result.message}")
+        message_obj = {"title": title, "content": content, "level": "info", "data": rows, "scenario": scenario, "trigger": trigger}
+        ok_count, failures = _deliver(channels, message_obj, retry_times, steps)
 
         if ok_count == len(channels):
             status = "success"
@@ -304,6 +432,10 @@ def _run_locked(scenario_id: int, trigger: str, payload: dict | None) -> dict:
         else:
             status = "failed"
             message = "推送失败：" + "；".join(failures)
+
+        if ai_failed:
+            status = "failed"
+            message = f"AI处理失败：{ai_failed.get('error')}；已按策略照常推送（{message}）"
 
         return _finish(scenario, trigger, status, message, row_count, title, content, steps, started_at, t_start)
 
