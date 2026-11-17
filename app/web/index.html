@@ -518,6 +518,19 @@
       </div>
 
       <div class="panel">
+        <h3>启动</h3>
+        <label class="switch-line" v-if="autostart.supported">
+          <span class="switch"><input type="checkbox" :checked="autostart.enabled" :disabled="autostartBusy" @change="toggleAutostart($event.target.checked)"><i></i></span>
+          <span>开机自动启动（登录 Windows 后自动在系统托盘运行）</span>
+        </label>
+        <p class="help" v-else>当前系统不支持开机自启动（仅 Windows）。</p>
+        <p class="help" v-if="autostart.supported">
+          开启后会在注册表 <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</code> 写入启动项，启动命令：
+          <code>{{ autostart.command }}</code>
+        </p>
+      </div>
+
+      <div class="panel">
         <h3>备份与恢复</h3>
         <div class="inline-actions">
           <button class="btn ghost" @click="exportData">导出配置 JSON</button>

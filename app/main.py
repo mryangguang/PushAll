@@ -105,6 +105,10 @@ class EnabledIn(BaseModel):
     enabled: bool
 
 
+class AutostartIn(BaseModel):
+    enabled: bool
+
+
 class UpdateProxyIn(BaseModel):
     enabled: bool = False
     type: str = "http"
@@ -343,6 +347,36 @@ def cron_next(expr: str):
     if error:
         raise HTTPException(status_code=400, detail=error)
     return {"next": scheduler.next_runs(expr, 3)}
+
+
+# ---------------- 开机自启动 ----------------
+
+@app.get("/api/settings/autostart")
+def get_autostart():
+    from . import autostart
+
+    return {
+        "supported": autostart.supported(),
+        "enabled": autostart.is_enabled(),
+        "command": autostart.command(),
+    }
+
+
+@app.put("/api/settings/autostart")
+def set_autostart(body: AutostartIn):
+    from . import autostart
+
+    if not autostart.supported():
+        raise HTTPException(status_code=400, detail="仅支持 Windows 系统")
+    try:
+        if body.enabled:
+            cmd = autostart.enable()
+        else:
+            autostart.disable()
+            cmd = autostart.command()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"设置开机自启动失败：{exc}") from exc
+    return {"supported": True, "enabled": autostart.is_enabled(), "command": cmd}
 
 
 # ---------------- 插件 ----------------

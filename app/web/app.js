@@ -124,6 +124,8 @@ const app = createApp({
       updateInfo: null,
       updateChecking: false,
       updateProxy: { enabled: false, type: "http", host: "127.0.0.1", port: 1080, username: "", password: "", has_password: false },
+      autostart: { supported: false, enabled: false, command: "" },
+      autostartBusy: false,
       proxyTesting: false,
       proxyTest: null,
       maskMouseDown: false,
@@ -270,7 +272,10 @@ const app = createApp({
       } else {
         this.stopRunsAutoRefresh();
       }
-      if (view === "settings") this.loadUpdateProxy();
+      if (view === "settings") {
+        this.loadUpdateProxy();
+        this.loadAutostart();
+      }
       if (view === "plugins" && !this.plugins.length) this.refreshAll();
     },
 
@@ -916,6 +921,31 @@ const app = createApp({
 
     pickImport() { this.$refs.importInput.click(); },
 
+    async loadAutostart() {
+      try {
+        this.autostart = await api("/api/settings/autostart");
+      } catch (e) {
+        // 服务模式或旧版后端时静默忽略
+      }
+    },
+
+    async toggleAutostart(enabled) {
+      if (this.autostartBusy) return;
+      this.autostartBusy = true;
+      try {
+        this.autostart = await api("/api/settings/autostart", {
+          method: "PUT",
+          body: JSON.stringify({ enabled })
+        });
+        this.toastMsg(enabled ? "已开启：开机后自动在托盘运行" : "已关闭开机自启动");
+      } catch (e) {
+        this.toastMsg("设置失败：" + e.message, "bad");
+        await this.loadAutostart();
+      } finally {
+        this.autostartBusy = false;
+      }
+    },
+
     async checkUpdate() {
       this.updateChecking = true;
       try {
@@ -1014,6 +1044,7 @@ const app = createApp({
   mounted() {
     this.refreshAll();
     this.loadUpdateProxy();
+    this.loadAutostart();
   }
 });
 

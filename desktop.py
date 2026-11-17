@@ -492,7 +492,7 @@ class DesktopApp:
 
 # ---------------- 入口 ----------------
 
-def _run() -> int:
+def _run(start_hidden: bool = False) -> int:
     ensure_icons()
 
     # 已有实例：同版本唤回；旧版本则接管
@@ -553,6 +553,17 @@ def _run() -> int:
     from app.main import app as fastapi_app
 
     desktop = DesktopApp(server)
+
+    # 已开启开机自启动时，自愈注册表里的启动路径（程序目录被移动后仍可用）
+    try:
+        from app import autostart
+
+        if autostart.supported() and autostart.is_enabled():
+            autostart.enable()
+            log("开机自启动已开启，启动路径已更新")
+    except Exception as exc:  # noqa: BLE001
+        log(f"更新开机自启动路径失败：{exc}")
+
     fastapi_app.state.show_window = desktop.open_window
     fastapi_app.state.quit_app = desktop.quit_app
     fastapi_app.state.update_now = desktop.check_updates
@@ -583,11 +594,12 @@ def _run() -> int:
             min_size=(1000, 660),
             background_color="#f4f6fa",
             text_select=True,
+            hidden=start_hidden,
         )
         desktop.attach(window)
         window.events.closing += desktop.on_closing
         window.events.minimized += desktop.on_minimized
-        log("主窗口已创建")
+        log("主窗口已创建" + ("（开机自启动，仅托盘运行）" if start_hidden else ""))
         webview.start(icon=str(ICON_ICO))
         gui_ok = True
     except Exception as exc:  # noqa: BLE001
@@ -595,10 +607,15 @@ def _run() -> int:
 
     try:
         if not gui_ok:
-            # 缺少 WebView2 等情况下退化为浏览器，托盘与服务继续常驻
-            alert("无法创建桌面窗口（可能缺少 WebView2 运行时），已改用系统浏览器打开。")
-            webbrowser.open(URL)
-            desktop.stop_event.wait()
+            if start_hidden:
+                # 开机自启动场景不弹窗、不打开浏览器，保持托盘常驻
+                log("窗口创建失败（开机自启动模式），仅托盘运行")
+                desktop.stop_event.wait()
+            else:
+                # 缺少 WebView2 等情况下退化为浏览器，托盘与服务继续常驻
+                alert("无法创建桌面窗口（可能缺少 WebView2 运行时），已改用系统浏览器打开。")
+                webbrowser.open(URL)
+                desktop.stop_event.wait()
     finally:
         desktop.quitting = True
         try:
@@ -618,8 +635,9 @@ def main() -> int:
         return apply_update_from_args(sys.argv)
 
     ensure_streams()
+    start_hidden = "--tray" in sys.argv or "--minimized" in sys.argv
     try:
-        return _run()
+        return _run(start_hidden)
     except Exception:  # noqa: BLE001
         import traceback
 
