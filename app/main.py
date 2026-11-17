@@ -554,7 +554,10 @@ def test_ai_model(body: AiTestIn):
         if row:
             cfg["api_key"] = _ai_key_open(row.get("api_key"))
     cfg["max_tokens"] = min(int(cfg.get("max_tokens") or 200), 200)
-    result = ai_mod.call_model(cfg, [{"role": "user", "content": "只回复两个字：正常"}])
+    result = ai_mod.call_model(
+        cfg,
+        [{"role": "user", "content": "请只输出一个 json 对象：{\"ok\": true}"}],
+    )
     if not result.get("ok"):
         return {"ok": False, "message": result.get("error") or "连接失败"}
     return {

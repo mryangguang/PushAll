@@ -38,7 +38,7 @@ DEFAULT_ERROR_BODY = """### AI 处理失败
 本次未推送业务数据，请检查网关或模型配置。"""
 
 SYSTEM_PROMPT = """你是数据处理助手。你会收到一组表格数据和一段处理要求。
-你只能输出一个 JSON 对象，不要输出解释、Markdown 代码块或任何多余文字。
+你只能输出一个 json 对象（小写 json 关键字），不要输出解释、Markdown 代码块或任何多余文字。
 
 允许的动作：
 - {"type":"drop","index":行号,"reason":"原因"}：过滤掉该行
@@ -126,6 +126,22 @@ def _strip_fences(text: str) -> str:
     return t.strip()
 
 
+def _error_text(resp: httpx.Response) -> str:
+    text = (resp.text or "")[:300]
+    try:
+        data = resp.json()
+    except ValueError:
+        return text
+    err = data.get("error") if isinstance(data, dict) else None
+    if isinstance(err, dict):
+        msg = str(err.get("message") or "").strip()
+        if msg:
+            return msg[:300]
+    if isinstance(err, str) and err.strip():
+        return err.strip()[:300]
+    return text
+
+
 def _headers(provider: dict) -> dict:
     headers = {"Content-Type": "application/json"}
     key = str(provider.get("api_key") or "")
@@ -154,26 +170,33 @@ def call_model(provider: dict, messages: list[dict]) -> dict:
         return {"ok": False, "error": "Base URL 或模型名未配置", "error_code": "config", "duration_ms": 0}
 
     url = base + "/chat/completions"
-    body: dict[str, Any] = {
-        "model": model,
-        "messages": messages,
-        "temperature": float(provider.get("temperature") or 0),
-        "max_tokens": int(provider.get("max_tokens") or 2000),
-        "stream": False,
-    }
-    if bool(provider.get("json_mode", True)):
-        body["response_format"] = {"type": "json_object"}
+    use_json_mode = bool(provider.get("json_mode", True))
+
+    def _body(with_json_mode: bool) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": float(provider.get("temperature") or 0),
+            "max_tokens": int(provider.get("max_tokens") or 2000),
+            "stream": False,
+        }
+        if with_json_mode:
+            body["response_format"] = {"type": "json_object"}
+        return body
 
     started = time.perf_counter()
     try:
         with httpx.Client(timeout=float(provider.get("timeout") or 30), verify=bool(provider.get("verify_tls", True))) as client:
-            resp = client.post(url, headers=_headers(provider), json=body)
+            resp = client.post(url, headers=_headers(provider), json=_body(use_json_mode))
+            # 部分网关（如 cc-switch 转发）不支持 response_format，400 时自动降级重试一次
+            if resp.status_code == 400 and use_json_mode:
+                resp = client.post(url, headers=_headers(provider), json=_body(False))
         duration = int((time.perf_counter() - started) * 1000)
         if resp.status_code >= 400:
             code = f"http_{resp.status_code}"
             return {
                 "ok": False,
-                "error": f"{ERROR_LABELS.get(code, 'HTTP ' + str(resp.status_code))}：{resp.text[:300]}",
+                "error": f"{ERROR_LABELS.get(code, 'HTTP ' + str(resp.status_code))}：{_error_text(resp)}",
                 "error_code": code,
                 "duration_ms": duration,
             }
