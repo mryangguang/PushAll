@@ -5,7 +5,7 @@
 
 本地单机 · 插件化 · 系统托盘常驻 · GitHub Releases 自动更新
 
-**当前版本：v0.2.3** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
+**当前版本：v0.2.4** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
 
 ---
 
@@ -65,6 +65,10 @@
 ---
 
 ## 最近更新
+
+### v0.2.4
+- 去掉更新结束时用 `cmd + timeout` 清理临时目录的做法（就是那个显示倒计时的黑窗）
+- 改为新版本启动后静默清理旧的更新临时目录，全程无任何命令窗口
 
 ### v0.2.3
 - 修复「测试连接」提示 `'messages' must contain the word 'json'` 的 400 错误：测试请求现在明确包含 json 并要求返回 json
