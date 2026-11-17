@@ -5,7 +5,7 @@
 
 本地单机 · 插件化 · 系统托盘常驻 · GitHub Releases 自动更新
 
-**当前版本：v0.1.23** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
+**当前版本：v0.1.24** ｜ Windows x64 便携版 ｜ Python 3.13 + FastAPI + Vue 3 + pywebview
 
 ---
 
@@ -64,6 +64,11 @@
 ---
 
 ## 最近更新
+
+### v0.1.24
+- 设置页新增「启动」开关：开启后，登录 Windows 会自动在系统托盘运行 PushAll，不弹主窗口
+- 写入当前用户注册表 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`，无需管理员权限；关闭即删除
+- 程序目录移动后，下次启动会自动更新注册表里的启动路径
 
 ### v0.1.23
 - 运行记录页筛选行（「全部场景」下拉、「刷新」按钮、「每 5 秒自动刷新」提示）改为垂直居中对齐，提示文字不再偏上
