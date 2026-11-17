@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import zipfile
 from pathlib import Path
@@ -21,7 +22,7 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
-from . import crypto, db, settings
+from . import crypto, db, proc, settings
 
 DEFAULT_REPO = "mryangguang/PushAll"
 API_URL = "https://api.github.com/repos/{repo}/releases/latest"
@@ -341,7 +342,7 @@ def stage(release: dict) -> Path:
     return _extract(archive_path, version)
 
 
-def launch_updater(source_dir: Path, app_dir: Path, pid: int | None = None, restart: bool = True) -> Path:
+def launch_updater(source_dir: Path, app_dir: Path, pid: int | None = None, restart: bool = True, version: str = "") -> Path:
     """启动新版本自带的 Python 更新器，不依赖 cmd/robocopy，支持中文路径。"""
     source_dir = source_dir.resolve()
     app_dir = app_dir.resolve()
@@ -358,26 +359,23 @@ def launch_updater(source_dir: Path, app_dir: Path, pid: int | None = None, rest
     ]
     if not restart:
         args.append("--no-restart")
+    if version:
+        args.extend(["--version", str(version)])
 
-    flags = 0
-    if os.name == "nt":
-        flags = getattr(subprocess, "DETACHED_PROCESS", 0x00000008) | getattr(
-            subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200
-        )
     subprocess.Popen(
         args,
         cwd=str(source_dir),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        creationflags=flags,
         close_fds=True,
+        **proc.detached_kwargs(),
     )
     return exe
 
 
 def apply_update_from_args(argv: list[str]) -> int:
-    """由新版本 exe 以 --apply-update 运行：等旧进程退出 → 复制文件 → 重启。"""
+    """由新版本 exe 以 --apply-update 运行：显示进度窗口 → 等旧进程退出 → 复制 → 重启。"""
     import argparse
 
     parser = argparse.ArgumentParser(prog="PushAll")
@@ -386,6 +384,7 @@ def apply_update_from_args(argv: list[str]) -> int:
     parser.add_argument("--app-dir", required=True)
     parser.add_argument("--pid", type=int, default=0)
     parser.add_argument("--no-restart", action="store_true")
+    parser.add_argument("--version", default="")
     args, _ = parser.parse_known_args(argv[1:])
 
     source = Path(args.source).resolve()
@@ -400,22 +399,68 @@ def apply_update_from_args(argv: list[str]) -> int:
         except OSError:
             pass
 
-    log(f"python updater start: source={source} app={app_dir} pid={args.pid}")
+    log(f"python updater start: source={source} app={app_dir} pid={args.pid} version={args.version}")
+
+    silent = str(os.getenv("PUSHALL_UPDATE_SILENT") or "").strip() in ("1", "true", "yes")
+    if silent:
+        return _apply_update(args, log, None)
+
+    progress = None
+    try:
+        from .update_progress import UpdateProgress
+
+        progress = UpdateProgress(args.version)
+    except Exception as exc:  # noqa: BLE001
+        log(f"progress window unavailable: {exc}")
+        return _apply_update(args, log, None)
+
+    result = {"code": 1}
+
+    def work() -> None:
+        try:
+            result["code"] = _apply_update(args, log, progress)
+        except Exception as exc:  # noqa: BLE001
+            log(f"update failed: {exc}")
+            result["code"] = 1
+            try:
+                progress.finish(False, f"更新失败：{exc}")
+            except Exception:  # noqa: BLE001
+                pass
+
+    threading.Thread(target=work, daemon=True).start()
+    progress.run()
+    return int(result["code"])
+
+
+def _apply_update(args, log, progress) -> int:
+    source = Path(args.source).resolve()
+    app_dir = Path(args.app_dir).resolve()
+
+    def status(text: str) -> None:
+        log(text)
+        if progress:
+            try:
+                progress.set_status(text)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def finish(ok: bool, message: str) -> None:
+        if progress:
+            try:
+                progress.finish(ok, message)
+            except Exception:  # noqa: BLE001
+                pass
 
     if args.pid:
+        status("等待旧版本退出…")
         deadline = time.time() + 120
         while time.time() < deadline:
-            try:
-                out = subprocess.check_output(
-                    ["tasklist", "/FI", f"PID eq {args.pid}"], text=True, errors="ignore"
-                )
-            except Exception:  # noqa: BLE001
-                out = ""
-            if str(args.pid) not in out:
+            if not proc.pid_alive(args.pid):
                 break
-            time.sleep(0.5)
+            time.sleep(0.3)
         else:
             log("wait for old process timeout")
+            finish(False, "等待旧版本退出超时，请手动关闭后重试")
             return 1
     log("old process exited")
 
@@ -435,6 +480,7 @@ def apply_update_from_args(argv: list[str]) -> int:
                     ignored.add(name)
         return ignored
 
+    status("正在复制新版本文件…")
     for attempt in range(5):
         try:
             shutil.copytree(source, app_dir, dirs_exist_ok=True, ignore=_ignore)
@@ -444,20 +490,24 @@ def apply_update_from_args(argv: list[str]) -> int:
             time.sleep(1)
     else:
         log("update failed: copy error")
+        finish(False, "复制文件失败，请查看 logs\\update.log")
         return 1
     plugin_dir = app_dir / "_internal" / "app" / "plugins" / "builtin"
     plugin_count = len(list(plugin_dir.glob("*/manifest.json"))) if plugin_dir.exists() else 0
     log(f"files copied (builtin plugins: {plugin_count})")
 
-    flags = 0
-    if os.name == "nt":
-        flags = getattr(subprocess, "DETACHED_PROCESS", 0x00000008) | getattr(
-            subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200
-        )
-
+    status("正在重启程序…")
     if not args.no_restart:
         exe = app_dir / "PushAll.exe"
-        subprocess.Popen([str(exe)], cwd=str(app_dir), creationflags=flags, close_fds=True)
+        subprocess.Popen(
+            [str(exe)],
+            cwd=str(app_dir),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            **proc.detached_kwargs(),
+        )
         log("restarted")
 
     # 清理临时目录（可选，失败不影响）
@@ -470,12 +520,22 @@ def apply_update_from_args(argv: list[str]) -> int:
             '(goto) 2>nul & del "%~f0"\r\n',
             encoding="utf-8",
         )
-        subprocess.Popen(["cmd.exe", "/c", str(cleanup)], creationflags=flags, close_fds=True)
+        subprocess.Popen(
+            ["cmd.exe", "/c", str(cleanup)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            **proc.detached_kwargs(),
+        )
     except Exception:  # noqa: BLE001
         pass
+
+    finish(True, "更新完成，正在重启…")
     return 0
 
-# ---------------- 跳过记录 ----------------
+
+# ---------------- 跳过记录 ----------------# ---------------- 跳过记录 ----------------
 
 def _state_file() -> Path:
     settings.ensure_dirs()

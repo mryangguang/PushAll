@@ -52,6 +52,8 @@ hiddenimports += [
     "app.crypto",
     "app.plugins.loader",
     "app.plugins.base",
+    "tkinter",
+    "tkinter.ttk",
     "webview.platforms.winforms",
     "pystray._win32",
     "anyio._backends._asyncio",

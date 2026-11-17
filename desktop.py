@@ -23,6 +23,7 @@ import httpx
 import uvicorn
 
 from app.settings import APP_HOME, RESOURCE_DIR, VERSION
+from app import proc
 
 BASE_DIR = APP_HOME
 HOST = "127.0.0.1"
@@ -187,6 +188,7 @@ def stop_old_instance() -> bool:
             ["taskkill", "/F", "/IM", "PushAll.exe", "/FI", f"PID ne {os.getpid()}"],
             capture_output=True,
             timeout=15,
+            **proc.hidden_kwargs(),
         )
     except Exception as exc:  # noqa: BLE001
         log(f"结束旧实例失败：{exc}")
@@ -386,7 +388,7 @@ class DesktopApp:
             log("用户取消安装更新")
             return
 
-        updater.launch_updater(staged, BASE_DIR, os.getpid(), restart=True)
+        updater.launch_updater(staged, BASE_DIR, os.getpid(), restart=True, version=latest)
         log("已启动更新脚本，准备退出当前进程")
         self.quit_app()
 
